@@ -1,22 +1,25 @@
-# rust-traits
+# Skills
 
-Rust trait system best practices, patterns, and idiomatic usage for AI coding agents.
+Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurDEV44).
 
-## What's covered
+## Available Skills
 
-- Trait definition and implementation
-- Derive macros (Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)
-- Dynamic dispatch with `dyn Trait`
-- `impl Trait` syntax for arguments and return types
-- Operator overloading with `std::ops` traits
-- Key trait patterns: Drop, Iterator, Clone
-- Supertraits
-- Trait method disambiguation (fully qualified syntax)
+| Skill | Description |
+|-------|-------------|
+| [rust-traits](skills/rust-traits) | Rust trait system best practices, patterns, and idiomatic usage |
 
 ## Install
 
+Install all skills:
+
 ```bash
-npx skills add ArthurDEV44/rust-traits-skill
+npx skills add https://github.com/ArthurDEV44/skills
+```
+
+Install a specific skill:
+
+```bash
+npx skills add https://github.com/ArthurDEV44/skills --skill rust-traits
 ```
 
 ## License
