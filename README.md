@@ -1,12 +1,20 @@
 # Skills
 
-Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurDEV44).
+Collection of Rust AI coding agent skills by [ArthurDEV44](https://github.com/ArthurDEV44).
 
 ## Available Skills
 
 | Skill | Description |
 |-------|-------------|
-| [rust-traits](skills/rust-traits) | Rust trait system best practices, patterns, and idiomatic usage |
+| [rust-arc](skills/rust-arc) | Thread-safe shared ownership with Arc and reference counting |
+| [rust-async](skills/rust-async) | Async/await patterns, futures, streams, and runtime usage |
+| [rust-axum](skills/rust-axum) | Axum web framework: routing, extractors, handlers, middleware |
+| [rust-concurrency](skills/rust-concurrency) | Threads, message passing, shared state, Send/Sync, atomics |
+| [rust-crypto](skills/rust-crypto) | AES-GCM authenticated encryption and HMAC message authentication |
+| [rust-ownership](skills/rust-ownership) | Ownership, borrowing, lifetimes, subtyping, and variance |
+| [rust-seaorm](skills/rust-seaorm) | SeaORM async ORM: entities, CRUD, relations, transactions |
+| [rust-tokio](skills/rust-tokio) | Tokio runtime: task spawning, channels, I/O, select!, shutdown |
+| [rust-traits](skills/rust-traits) | Trait system best practices, patterns, and idiomatic usage |
 
 ## Install
 
