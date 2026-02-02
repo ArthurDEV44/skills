@@ -1,11 +1,12 @@
 # Skills
 
-Collection of Rust AI coding agent skills by [ArthurDEV44](https://github.com/ArthurDEV44).
+Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurDEV44).
 
 ## Available Skills
 
 | Skill | Description |
 |-------|-------------|
+| [coss-ui](skills/coss-ui) | Component library built on Base UI and Tailwind CSS for React |
 | [rust-arc](skills/rust-arc) | Thread-safe shared ownership with Arc and reference counting |
 | [rust-async](skills/rust-async) | Async/await patterns, futures, streams, and runtime usage |
 | [rust-axum](skills/rust-axum) | Axum web framework: routing, extractors, handlers, middleware |
