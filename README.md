@@ -16,6 +16,8 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 | [rust-seaorm](skills/rust-seaorm) | SeaORM async ORM: entities, CRUD, relations, transactions |
 | [rust-tokio](skills/rust-tokio) | Tokio runtime: task spawning, channels, I/O, select!, shutdown |
 | [rust-traits](skills/rust-traits) | Trait system best practices, patterns, and idiomatic usage |
+| [tanstack-form](skills/tanstack-form) | TanStack Form: state management, validation, and submission handling |
+| [tanstack-query](skills/tanstack-query) | TanStack Query v5: data fetching, caching, mutations, and SSR |
 
 ## Install
 
