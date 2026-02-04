@@ -6,6 +6,8 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 
 | Skill | Description |
 |-------|-------------|
+| [async-stripe](skills/async-stripe) | async-stripe Rust crate: OpenAPI codegen, typed Stripe API bindings |
+| [clerk-rs-sdk](skills/clerk-rs-sdk) | clerk-rs Rust SDK: typed API calls, JWT validation, framework middleware |
 | [coss-ui](skills/coss-ui) | Component library built on Base UI and Tailwind CSS for React |
 | [rust-arc](skills/rust-arc) | Thread-safe shared ownership with Arc and reference counting |
 | [rust-async](skills/rust-async) | Async/await patterns, futures, streams, and runtime usage |
