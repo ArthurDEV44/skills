@@ -11,6 +11,7 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 | [coss-ui](skills/coss-ui) | Component library built on Base UI and Tailwind CSS for React |
 | [painterly-kuwahara-shader](skills/painterly-kuwahara-shader) | Painterly post-processing with Kuwahara filter: watercolor, oil paint, gouache effects for R3F |
 | [post-processing-shaders](skills/post-processing-shaders) | Creative post-processing shader effects: pixelation, cell patterns, optical illusions for R3F |
+| [retro-dithering-crt](skills/retro-dithering-crt) | Retro dithering, color quantization, CRT effects: Bayer matrix, RGB cells, scanlines for R3F |
 | [rust-arc](skills/rust-arc) | Thread-safe shared ownership with Arc and reference counting |
 | [rust-async](skills/rust-async) | Async/await patterns, futures, streams, and runtime usage |
 | [rust-axum](skills/rust-axum) | Axum web framework: routing, extractors, handlers, middleware |
