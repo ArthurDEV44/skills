@@ -22,6 +22,7 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 | [tanstack-query](skills/tanstack-query) | TanStack Query v5: data fetching, caching, mutations, and SSR |
 | [tanstack-table](skills/tanstack-table) | TanStack Table v8: headless tables, sorting, filtering, pagination, selection |
 | [tsl-webgpu](skills/tsl-webgpu) | TSL (Three.js Shading Language) and WebGPU: shaders, compute, node materials |
+| [volumetric-lighting](skills/volumetric-lighting) | Volumetric lighting with post-processing raymarching for R3F/Three.js |
 
 ## Install
 
