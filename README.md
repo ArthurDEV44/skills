@@ -7,6 +7,7 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 | Skill | Description |
 |-------|-------------|
 | [async-stripe](skills/async-stripe) | async-stripe Rust crate: OpenAPI codegen, typed Stripe API bindings |
+| [caustics-r3f](skills/caustics-r3f) | Real-time caustic light effects: GLSL shaders, render targets, refraction, area-ratio intensity for R3F |
 | [clerk-rs-sdk](skills/clerk-rs-sdk) | clerk-rs Rust SDK: typed API calls, JWT validation, framework middleware |
 | [coss-ui](skills/coss-ui) | Component library built on Base UI and Tailwind CSS for React |
 | [moebius-post-processing](skills/moebius-post-processing) | Moebius-style NPR post-processing: hand-drawn outlines, crosshatched shadows, Sobel edge detection for R3F |
