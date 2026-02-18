@@ -58,6 +58,7 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 
 | Skill | Description |
 |-------|-------------|
+| [agent-swarm](skills/agent-swarm) | Agent teams orchestration: TeamCreate, SendMessage, tasks, 4 patterns, tmux, hooks, cleanup |
 | [mcp-server-dev](skills/mcp-server-dev) | Build MCP servers in TypeScript: tools, resources, prompts, transports |
 | [skill-creator](skills/skill-creator) | Interactive guide for creating and updating Claude Code skills |
 
