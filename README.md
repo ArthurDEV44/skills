@@ -21,6 +21,12 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 | [clerk-rs-sdk](skills/clerk-rs-sdk) | clerk-rs Rust SDK: typed API calls, JWT validation, framework middleware |
 | [async-stripe](skills/async-stripe) | async-stripe Rust crate: OpenAPI codegen, typed Stripe API bindings |
 
+### C
+
+| Skill | Description |
+|-------|-------------|
+| [c-best-practices](skills/c-best-practices) | Modern C (C11/C17/C23): memory safety, pointers, structs, error handling, strings, preprocessor, threads, atomics, sanitizers |
+
 ### Go
 
 | Skill | Description |
