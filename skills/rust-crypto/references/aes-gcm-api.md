@@ -39,8 +39,8 @@ Opaque error type returned by encrypt/decrypt operations. Does not leak informat
 ### AeadCore
 
 Core AEAD interface providing:
-- `generate_key()` -- random key generation
-- `generate_nonce()` -- random nonce generation
+- `generate_key()` -- random key generation (v0.10: takes `OsRng`; v0.11: no args, returns `Result`)
+- `generate_nonce()` -- random nonce generation (v0.10: takes `&mut OsRng`; v0.11: no args, returns `Result`)
 - Associated types for nonce size, tag size, ciphertext overhead
 
 ### Aead (v0.10) / AeadInOut (v0.11)
@@ -92,6 +92,16 @@ Valid tag sizes: U12, U13, U14, U15, U16 (bytes). Default is U16 (128-bit tag).
 [dependencies]
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "heapless"] }
 ```
+
+## Dependencies
+
+### Stable (v0.10)
+
+- `aead ^0.5`, `aes ^0.8`, `cipher ^0.4`, `ctr ^0.9`, `ghash ^0.5`, `subtle ^2`
+
+### RC (v0.11)
+
+- Updated aead, aes, cipher, ctr, ghash with matching RC versions
 
 ## Security Notes
 

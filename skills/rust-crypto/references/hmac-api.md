@@ -6,6 +6,7 @@
 - [Traits](#traits)
 - [Hmac vs SimpleHmac](#hmac-vs-simplehmac)
 - [Reset Variants](#reset-variants)
+- [Common Type Aliases](#common-type-aliases)
 - [Dependencies](#dependencies)
 
 ## Types
@@ -82,13 +83,24 @@ use sha2::Sha256;
 
 type HmacSha256 = HmacReset<Sha256>;
 
-// v0.13 RC
 let mut mac = HmacSha256::new_from_slice(b"key").unwrap();
 mac.update(b"message 1");
 let tag1 = mac.finalize_reset(); // resets internal state
 
 mac.update(b"message 2");
 let tag2 = mac.finalize();
+```
+
+## Common Type Aliases
+
+```rust
+use hmac::Hmac;
+use sha2::{Sha256, Sha512};
+use sha1::Sha1;
+
+type HmacSha256 = Hmac<Sha256>;
+type HmacSha512 = Hmac<Sha512>;
+type HmacSha1 = Hmac<Sha1>;   // legacy only -- prefer SHA-256+
 ```
 
 ## Dependencies
