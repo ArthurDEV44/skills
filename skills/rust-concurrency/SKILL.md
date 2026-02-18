@@ -4,13 +4,14 @@ description: >
   Rust concurrency and parallelism patterns: threads, message passing with channels, shared state
   with Mutex and Arc, Send and Sync marker traits, data races vs race conditions, and atomics
   with memory orderings. Use when writing, reviewing, or refactoring Rust concurrent code:
-  (1) Spawning threads with std::thread and JoinHandle, (2) Using move closures with threads,
-  (3) Message passing with mpsc channels (single and multiple producers), (4) Shared-state
-  concurrency with Mutex and Arc, (5) Understanding or implementing Send and Sync traits,
-  (6) Fixing "cannot be sent between threads safely" errors, (7) Choosing between message passing
-  and shared state, (8) Working with atomics and memory orderings (SeqCst, Acquire, Release,
-  Relaxed), (9) Preventing data races and understanding race conditions, (10) Building thread-safe
-  types with raw pointers.
+  (1) Spawning threads with std::thread, JoinHandle, and scoped threads, (2) Using move closures
+  with threads, (3) Message passing with mpsc channels and sync_channel (bounded), (4) Shared-state
+  concurrency with Mutex, RwLock, Condvar, Barrier, Arc, OnceLock, and LazyLock,
+  (5) Understanding or implementing Send and Sync traits, (6) Fixing "cannot be sent between
+  threads safely" errors, (7) Choosing between message passing and shared state, (8) Working with
+  atomics and memory orderings (SeqCst, AcqRel, Acquire, Release, Relaxed), (9) Preventing data
+  races and understanding race conditions, (10) Building thread-safe types with raw pointers,
+  (11) Deadlock avoidance and poisoned mutex recovery.
 ---
 
 # Rust Concurrency
@@ -39,6 +40,7 @@ handle.join().unwrap(); // blocks until thread finishes
 - When main thread ends, **all spawned threads are shut down** whether finished or not
 - Where you call `.join()` matters: calling it before other work serializes execution
 - Rust uses 1:1 threading model (one OS thread per language thread)
+- `thread::available_parallelism()` returns the estimated number of hardware threads
 
 ### move closures -- transferring ownership to threads
 
@@ -57,6 +59,33 @@ handle.join().unwrap();
 - Required because Rust can't guarantee the spawned thread won't outlive the borrowed data
 - Without `move`, compiler errors: `closure may outlive the current function`
 
+### Scoped threads (Rust 1.63+)
+
+Scoped threads can **borrow from the parent stack** without `move`, because the scope guarantees all threads join before returning:
+
+```rust
+use std::thread;
+
+let mut data = vec![1, 2, 3];
+
+thread::scope(|s| {
+    s.spawn(|| {
+        println!("borrowed: {data:?}"); // immutable borrow -- no move needed
+    });
+
+    s.spawn(|| {
+        println!("also borrowed: {data:?}");
+    });
+}); // all scoped threads are joined here automatically
+
+data.push(4); // data is usable again after the scope
+```
+
+- All threads spawned in the scope are guaranteed to join before `thread::scope` returns
+- Eliminates the need for `Arc` when sharing stack data with threads
+- Supports mutable borrows (only one thread can hold a mutable reference at a time)
+- Panics from scoped threads are propagated when the scope ends
+
 ## Message Passing (Channels)
 
 ### Basic mpsc channel
@@ -65,7 +94,7 @@ handle.join().unwrap();
 use std::sync::mpsc;
 use std::thread;
 
-let (tx, rx) = mpsc::channel(); // multiple producer, single consumer
+let (tx, rx) = mpsc::channel(); // unbounded, multiple producer, single consumer
 
 thread::spawn(move || {
     tx.send(String::from("hello")).unwrap();
@@ -78,10 +107,32 @@ let msg = rx.recv().unwrap(); // blocks until message arrives
 - `send()` takes ownership of the value -- prevents use-after-send
 - `recv()` blocks; `try_recv()` returns immediately (non-blocking)
 - Channel closes when all transmitters are dropped
+- `recv()` returns `Err(RecvError)` when all senders are dropped
+
+### Bounded channel (back-pressure)
+
+```rust
+use std::sync::mpsc;
+
+let (tx, rx) = mpsc::sync_channel(3); // buffer capacity of 3
+
+// send() blocks when buffer is full (back-pressure)
+tx.send(1).unwrap();
+tx.send(2).unwrap();
+tx.send(3).unwrap();
+// tx.send(4).unwrap(); // would block until rx.recv() frees a slot
+```
+
+- `sync_channel(0)` creates a rendezvous channel (sender blocks until receiver is ready)
+- Use bounded channels to prevent unbounded memory growth in producer-consumer patterns
 
 ### Iterating over received messages
 
 ```rust
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+
 let (tx, rx) = mpsc::channel();
 
 thread::spawn(move || {
@@ -91,7 +142,7 @@ thread::spawn(move || {
     }
 });
 
-for received in rx {  // iterates until channel closes
+for received in rx { // iterates until channel closes
     println!("Got: {received}");
 }
 ```
@@ -99,6 +150,9 @@ for received in rx {  // iterates until channel closes
 ### Multiple producers
 
 ```rust
+use std::sync::mpsc;
+use std::thread;
+
 let (tx, rx) = mpsc::channel();
 let tx1 = tx.clone(); // clone transmitter for second producer
 
@@ -110,9 +164,11 @@ for msg in rx {
 }
 ```
 
-## Shared State (Mutex + Arc)
+## Shared State
 
-### Mutex<T> -- mutual exclusion
+For RwLock, Condvar, Barrier, OnceLock, LazyLock, poison recovery, and deadlock avoidance, see [references/shared-state-primitives.md](references/shared-state-primitives.md).
+
+### Mutex -- mutual exclusion
 
 ```rust
 use std::sync::Mutex;
@@ -131,7 +187,7 @@ println!("m = {m:?}"); // 6
 - If lock holder panicked, `lock()` returns `Err` (mutex is "poisoned")
 - Type system enforces: **cannot access data without acquiring the lock**
 
-### Arc<T> -- thread-safe reference counting
+### Arc -- thread-safe reference counting
 
 `Rc<T>` is **not** thread-safe. Use `Arc<T>` for shared ownership across threads:
 
@@ -158,20 +214,45 @@ for handle in handles {
 println!("Result: {}", *counter.lock().unwrap()); // 10
 ```
 
+### RwLock -- multiple readers or one writer
+
+```rust
+use std::sync::RwLock;
+
+let lock = RwLock::new(5);
+
+// Multiple concurrent readers
+{
+    let r1 = lock.read().unwrap();
+    let r2 = lock.read().unwrap(); // OK: multiple readers allowed
+    assert_eq!(*r1 + *r2, 10);
+} // read locks released
+
+// Exclusive writer
+{
+    let mut w = lock.write().unwrap();
+    *w += 1;
+} // write lock released
+```
+
+- Prefer `RwLock` over `Mutex` when reads vastly outnumber writes (e.g., config, caches)
+- Writer starvation is possible depending on the OS implementation
+- Also poisonable like `Mutex`
+
 ### Choosing between channels and shared state
 
 | | Message passing | Shared state |
 |---|---|---|
 | Model | Transfer ownership of data | Multiple owners with synchronized access |
-| Primitives | `mpsc::channel` | `Arc<Mutex<T>>` |
-| Best for | Pipelines, actor patterns | Counters, caches, shared collections |
+| Primitives | `mpsc::channel` | `Arc<Mutex<T>>`, `Arc<RwLock<T>>` |
+| Best for | Pipelines, actor patterns, fan-out | Counters, caches, shared collections |
 | Analogy | Single-ownership | Multiple-ownership with interior mutability |
 
-`RefCell<T>`/`Rc<T>` (single-threaded) maps to `Mutex<T>`/`Arc<T>` (multi-threaded)
+`RefCell<T>`/`Rc<T>` (single-threaded) maps to `Mutex<T>`/`Arc<T>` (multi-threaded).
 
 ## Send and Sync Traits
 
-For unsafe implementations and the full Carton<T> example, see [references/send-sync-deep.md](references/send-sync-deep.md).
+For unsafe implementations, the Carton example, and MutexGuard analysis, see [references/send-sync-deep.md](references/send-sync-deep.md).
 
 - **`Send`** -- safe to transfer ownership to another thread
 - **`Sync`** -- safe to reference from multiple threads (`T: Sync` iff `&T: Send`)
@@ -227,21 +308,61 @@ println!("{}", data[idx.load(Ordering::SeqCst)]);
 
 ## Atomics and Memory Orderings
 
-For full details on compiler/hardware reordering and the spinlock example, see [references/races-and-atomics.md](references/races-and-atomics.md).
+For full details on compiler/hardware reordering, the spinlock example, and `atomic::fence`, see [references/races-and-atomics.md](references/races-and-atomics.md).
 
-Rust inherits its atomics memory model from C++20. Four orderings exposed:
+Rust inherits its atomics memory model from C++20. Five orderings exposed:
 
 | Ordering | Guarantees | Cost | Use case |
 |----------|-----------|------|----------|
 | `SeqCst` | Global total order, no reordering | Highest (memory fences on all platforms) | Default safe choice |
+| `AcqRel` | Combined Acquire + Release on RMW ops | Medium | `fetch_add`, `compare_exchange` |
 | `Release` | All prior writes visible to paired `Acquire` | Low on x86 | Store side of lock/flag |
 | `Acquire` | Sees all writes before paired `Release` | Low on x86 | Load side of lock/flag |
 | `Relaxed` | Only atomicity, no ordering | Lowest | Counters, statistics |
 
 - `Acquire`/`Release` always come in pairs on the **same memory location**
+- `AcqRel` is for read-modify-write operations that need both acquire and release semantics
 - `SeqCst` is the safe default -- easy to downgrade to weaker orderings later
 - On strongly-ordered platforms (x86/64), `Acquire`/`Release` are often free
 - On weakly-ordered platforms (ARM), relaxed orderings provide real savings
+
+### Common atomic types
+
+`AtomicBool`, `AtomicI8`/`AtomicU8`, `AtomicI16`/`AtomicU16`, `AtomicI32`/`AtomicU32`, `AtomicI64`/`AtomicU64`, `AtomicIsize`/`AtomicUsize`, `AtomicPtr<T>`
+
+## Common Pitfalls
+
+### Deadlocks
+
+```rust
+// BUG: Acquiring locks in different order across threads causes deadlock
+// Thread 1: lock A then B
+// Thread 2: lock B then A
+// Fix: Always acquire locks in the same global order.
+```
+
+- Always acquire multiple locks in a consistent order across all threads
+- Keep lock scopes as short as possible -- drop guards explicitly if needed
+- Never hold a lock while performing blocking I/O or long computations
+- Consider using channels instead of multiple locks
+
+### Poisoned Mutex recovery
+
+```rust
+use std::sync::Mutex;
+
+let m = Mutex::new(5);
+
+// Recover from a poisoned mutex
+let data = m.lock().unwrap_or_else(|poisoned| {
+    eprintln!("Mutex was poisoned, recovering...");
+    poisoned.into_inner() // get the data anyway
+});
+```
+
+### Avoid holding MutexGuard across `.await`
+
+In async code, a `MutexGuard` held across an `.await` point prevents other tasks from acquiring the lock for the entire await duration. Use `tokio::sync::Mutex` or restructure to drop the guard before awaiting.
 
 ## Official Documentation
 
@@ -254,3 +375,5 @@ Rust inherits its atomics memory model from C++20. Four orderings exposed:
 - [Races (Nomicon)](https://doc.rust-lang.org/nomicon/races.html)
 - [Send and Sync (Nomicon)](https://doc.rust-lang.org/nomicon/send-and-sync.html)
 - [Atomics (Nomicon)](https://doc.rust-lang.org/nomicon/atomics.html)
+- [std::sync module](https://doc.rust-lang.org/std/sync/index.html)
+- [std::thread module](https://doc.rust-lang.org/std/thread/index.html)

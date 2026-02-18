@@ -9,7 +9,9 @@
 - [Hardware Reordering](#hardware-reordering)
 - [Data Accesses vs Atomic Accesses](#data-accesses-vs-atomic-accesses)
 - [Memory Orderings in Detail](#memory-orderings-in-detail)
+- [Atomic Fences](#atomic-fences)
 - [Spinlock Example](#spinlock-example)
+- [Common Atomic Patterns](#common-atomic-patterns)
 
 ## Data Races
 
@@ -128,6 +130,11 @@ Designed to be paired for synchronization.
 - All accesses before the release stay before it
 - Accesses after the release **may** reorder to before it
 
+**AcqRel** (on read-modify-write operations):
+- Combines Acquire semantics on the read and Release semantics on the write
+- Use for `fetch_add`, `compare_exchange`, `swap` when both sides need synchronization
+- Cannot be used with pure loads or pure stores (only RMW operations)
+
 **Causality**: When thread A does a Release store and thread B does an Acquire load on the **same location**, B sees all writes (atomic, relaxed, or non-atomic) that happened before A's Release.
 
 Requirements for causality to hold:
@@ -145,6 +152,54 @@ On strongly-ordered platforms (x86/64), Acquire-Release is often free (hardware 
 - Minimal benefit on x86 (already provides Acquire-Release semantics)
 - Can be cheaper on weakly-ordered platforms (ARM)
 
+## Atomic Fences
+
+Standalone memory fences decouple ordering from a specific atomic variable:
+
+```rust
+use std::sync::atomic::{fence, Ordering};
+
+// All prior writes become visible to any thread that later does an Acquire fence/load
+fence(Ordering::Release);
+
+// Sees all writes before any paired Release fence/store
+fence(Ordering::Acquire);
+
+// Full sequential consistency barrier
+fence(Ordering::SeqCst);
+```
+
+Fences establish happens-before relationships independently of a particular atomic variable. Useful when you need to synchronize access to multiple memory locations at once.
+
+### Fence-based spinlock
+
+```rust
+use std::sync::atomic::{AtomicBool, fence, Ordering};
+
+pub struct SpinLock {
+    flag: AtomicBool,
+}
+
+impl SpinLock {
+    pub fn new() -> Self {
+        Self { flag: AtomicBool::new(false) }
+    }
+
+    pub fn lock(&self) {
+        while self.flag
+            .compare_exchange_weak(false, true, Ordering::Relaxed, Ordering::Relaxed)
+            .is_err()
+        {}
+        // Fence synchronizes-with the Release fence in unlock()
+        fence(Ordering::Acquire);
+    }
+
+    pub fn unlock(&self) {
+        self.flag.store(false, Ordering::Release);
+    }
+}
+```
+
 ## Spinlock Example
 
 Acquire-Release used to build a simple spinlock:
@@ -160,7 +215,10 @@ fn main() {
     // ... distribute lock to threads ...
 
     // Acquire the lock
-    while lock.compare_and_swap(false, true, Ordering::Acquire) {}
+    while lock
+        .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+        .is_err()
+    {}
     // Lock acquired -- all writes after the previous Release are visible here
 
     // ... critical section: access shared data ...
@@ -171,6 +229,90 @@ fn main() {
 }
 ```
 
+- `compare_exchange_weak` can spuriously fail (returns `Err` even if value matches) but is faster on some platforms -- acceptable in a loop
+- `compare_exchange` never spuriously fails -- use when not in a retry loop
 - `Acquire` on lock acquisition ensures we see all writes from the previous lock holder
 - `Release` on unlock ensures the next acquirer sees our writes
 - This pattern is the foundation of all lock-based synchronization
+
+## Common Atomic Patterns
+
+### Lock-free counter
+
+```rust
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::thread;
+
+let counter = Arc::new(AtomicU64::new(0));
+let mut handles = vec![];
+
+for _ in 0..10 {
+    let counter = Arc::clone(&counter);
+    handles.push(thread::spawn(move || {
+        for _ in 0..1000 {
+            counter.fetch_add(1, Ordering::Relaxed); // Relaxed is fine for a counter
+        }
+    }));
+}
+
+for h in handles { h.join().unwrap(); }
+assert_eq!(counter.load(Ordering::Relaxed), 10_000);
+```
+
+### One-shot flag (e.g., shutdown signal)
+
+```rust
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread;
+
+let shutdown = Arc::new(AtomicBool::new(false));
+let flag = shutdown.clone();
+
+let worker = thread::spawn(move || {
+    while !flag.load(Ordering::Relaxed) {
+        // do work...
+    }
+    println!("Worker shutting down");
+});
+
+// Signal shutdown
+shutdown.store(true, Ordering::Relaxed);
+worker.join().unwrap();
+```
+
+### Compare-and-swap loop (lock-free update)
+
+```rust
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+let value = AtomicUsize::new(5);
+
+loop {
+    let current = value.load(Ordering::Acquire);
+    let new = current * 2;
+    match value.compare_exchange_weak(current, new, Ordering::AcqRel, Ordering::Acquire) {
+        Ok(_) => break,   // successfully updated
+        Err(_) => continue, // another thread changed it, retry
+    }
+}
+```
+
+### AtomicPtr for lock-free data structures
+
+```rust
+use std::sync::atomic::{AtomicPtr, Ordering};
+use std::ptr;
+
+let data = Box::new(42);
+let atom = AtomicPtr::new(Box::into_raw(data));
+
+// Swap the pointer atomically
+let old = atom.swap(Box::into_raw(Box::new(100)), Ordering::AcqRel);
+unsafe { drop(Box::from_raw(old)); } // free the old allocation
+
+// Clean up
+let final_ptr = atom.load(Ordering::Acquire);
+unsafe { drop(Box::from_raw(final_ptr)); }
+```
