@@ -3,37 +3,104 @@ name: rust-traits
 description: >
   Rust trait system best practices, patterns, and idiomatic usage. Covers trait definition,
   implementation, derive macros, dynamic dispatch (dyn), operator overloading (Add, Sub, Mul...),
-  Drop, Iterator, Clone, supertraits, impl Trait syntax, and fully qualified disambiguation.
-  Use when writing, reviewing, or refactoring Rust code involving traits: (1) Defining or
-  implementing traits, (2) Using derive macros, (3) Operator overloading with std::ops traits,
-  (4) Dynamic dispatch with dyn Trait and trait objects, (5) Implementing Iterator, Drop, or Clone,
-  (6) Using supertraits or trait hierarchies, (7) Disambiguating overlapping trait methods,
-  (8) Using impl Trait as argument or return type.
+  Drop, Iterator, Clone, supertraits, impl Trait syntax, fully qualified disambiguation,
+  associated types, trait bounds, object safety, blanket implementations, orphan rule, newtype
+  pattern, sealed traits, extension traits, and standard traits (Display, From/Into, Default,
+  Send/Sync, Sized). Use when writing, reviewing, or refactoring Rust code involving traits:
+  (1) Defining or implementing traits, (2) Using derive macros, (3) Operator overloading,
+  (4) Dynamic dispatch with dyn Trait, (5) Implementing Iterator, Drop, or Clone,
+  (6) Using supertraits, (7) Disambiguating overlapping trait methods, (8) impl Trait syntax,
+  (9) Associated types and constants, (10) Object safety, (11) Blanket implementations,
+  (12) Send, Sync, Sized, or marker traits.
 ---
 
 # Rust Traits
 
-## Quick Reference
-
-### Trait Definition & Implementation
+## Trait Definition & Implementation
 
 ```rust
-trait Animal {
-    fn new(name: &'static str) -> Self;  // Associated function
-    fn name(&self) -> &'static str;       // Required method
-    fn talk(&self) {                      // Default method
-        println!("{} says hello", self.name());
+trait Summary {
+    // Required method (no body)
+    fn summarize(&self) -> String;
+
+    // Default method (can be overridden)
+    fn preview(&self) -> String {
+        format!("{}...", &self.summarize()[..20])
     }
 }
 
-impl Animal for Dog {
-    fn new(name: &'static str) -> Self { Dog { name } }
-    fn name(&self) -> &'static str { self.name }
-    // talk() inherited from default
+impl Summary for Article {
+    fn summarize(&self) -> String {
+        format!("{}, by {}", self.title, self.author)
+    }
+    // preview() inherited from default
 }
 ```
 
-### Derive Macros
+### Associated Types
+
+Define placeholder types that implementors must specify. Prefer over generics when there is exactly one natural implementation per type:
+
+```rust
+trait Iterator {
+    type Item;                    // Associated type
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl Iterator for Counter {
+    type Item = u32;              // Concrete type chosen here
+    fn next(&mut self) -> Option<u32> { /* ... */ }
+}
+```
+
+**Associated type vs generic parameter:**
+- `trait Foo { type Bar; }` -- one impl per type, cleaner call sites
+- `trait Foo<Bar> {}` -- multiple impls per type (e.g., `From<T>` for many `T`)
+
+### Associated Constants
+
+```rust
+trait Float {
+    const ZERO: Self;
+    const ONE: Self;
+}
+impl Float for f64 {
+    const ZERO: f64 = 0.0;
+    const ONE: f64 = 1.0;
+}
+```
+
+## Trait Bounds & Where Clauses
+
+```rust
+// Inline bound
+fn print_it(item: &impl Display) { println!("{item}"); }
+
+// Generic bound (equivalent)
+fn print_it<T: Display>(item: &T) { println!("{item}"); }
+
+// Multiple bounds with +
+fn log<T: Display + Debug>(item: &T) { /* ... */ }
+
+// Where clause (cleaner for complex bounds)
+fn process<T, U>(t: &T, u: &U) -> String
+where
+    T: Display + Clone,
+    U: Debug + Into<String>,
+{
+    format!("{t}: {:?}", u)
+}
+```
+
+**Bound on associated type:**
+```rust
+fn sum_iter<I>(iter: I) -> i64
+where
+    I: Iterator<Item = i64>,
+{ iter.sum() }
+```
+
+## Derive Macros
 
 Apply `#[derive(...)]` to structs, enums, or unions. Built-in derives:
 
@@ -46,9 +113,29 @@ struct Point { x: f64, y: f64 }
 
 Generated impls add trait bounds on generic params: `#[derive(Clone)]` on `Foo<T>` generates `impl<T: Clone> Clone for Foo<T>`.
 
-### Dynamic Dispatch (`dyn`)
+## `impl Trait`
 
-Use `Box<dyn Trait>` to return different concrete types implementing the same trait:
+**As argument** (static dispatch, syntactic sugar for generics):
+```rust
+fn process(reader: impl BufRead) -> io::Result<String> { /* ... */ }
+// Equivalent to: fn process<R: BufRead>(reader: R) -> ...
+```
+
+**As return type** (single concrete type, enables returning closures/iterators):
+```rust
+fn make_adder(y: i32) -> impl Fn(i32) -> i32 {
+    move |x| x + y
+}
+fn doubled(v: &[i32]) -> impl Iterator<Item = i32> + '_ {
+    v.iter().map(|x| x * 2)
+}
+```
+
+Note: return-position `impl Trait` must return **one** concrete type. For multiple types, use `Box<dyn Trait>`.
+
+## Dynamic Dispatch & Trait Objects
+
+Use `dyn Trait` when the concrete type is unknown at compile time:
 
 ```rust
 fn make_animal(kind: &str) -> Box<dyn Animal> {
@@ -59,29 +146,18 @@ fn make_animal(kind: &str) -> Box<dyn Animal> {
 }
 ```
 
-`dyn Trait` = pointer with vtable, fixed size. Use when the concrete type is unknown at compile time.
+Common forms: `Box<dyn Trait>`, `&dyn Trait`, `Arc<dyn Trait>`, `Box<dyn Trait + Send + Sync>`.
 
-### `impl Trait`
+**Object safety** -- a trait can only be used as `dyn Trait` if:
+1. All methods have `&self`, `&mut self`, or `self: Box<Self>` receiver (or no `self`)
+2. No method returns `Self` (use `-> Box<dyn Trait>` or `where Self: Sized` to exclude)
+3. No generic type parameters on methods
+4. No associated functions without `Self` receiver (or `where Self: Sized` bound)
+5. Trait has no `Self: Sized` supertrait bound
 
-**As argument** (static dispatch, syntactic sugar for generics):
-```rust
-fn process(reader: impl BufRead) -> io::Result<String> { ... }
-// Equivalent to: fn process<R: BufRead>(reader: R) -> ...
-```
-
-**As return type** (enables returning closures/iterators without naming types):
-```rust
-fn make_adder(y: i32) -> impl Fn(i32) -> i32 {
-    move |x| x + y
-}
-fn doubled(v: &[i32]) -> impl Iterator<Item = i32> + '_ {
-    v.iter().map(|x| x * 2)
-}
-```
+For detailed rules, vtable mechanics, and trait object lifetimes, see [references/trait-objects.md](references/trait-objects.md).
 
 ## Operator Overloading
-
-For detailed operator-trait mapping and examples, see [references/operators.md](references/operators.md).
 
 Implement traits from `std::ops` to overload operators:
 
@@ -94,18 +170,9 @@ impl Add for Point {
         Self { x: self.x + rhs.x, y: self.y + rhs.y }
     }
 }
-// Now: Point { x:1, y:2 } + Point { x:3, y:4 }
 ```
 
-Cross-type addition with custom `Rhs`:
-```rust
-impl Add<Meters> for Millimeters {
-    type Output = Millimeters;
-    fn add(self, rhs: Meters) -> Millimeters {
-        Millimeters(self.0 + rhs.0 * 1000)
-    }
-}
-```
+For the complete operator-trait mapping table and patterns, see [references/operators.md](references/operators.md).
 
 ## Key Trait Patterns
 
@@ -135,13 +202,13 @@ impl Iterator for Counter {
 // Enables: counter.take(3), counter.skip(2), for x in counter { ... }
 ```
 
-### Clone
+### Clone & Copy
 
 ```rust
-#[derive(Clone)]        // Deep copy for types with heap resources
+#[derive(Clone)]        // Deep copy (heap resources)
 struct Data(Box<i32>);
 
-#[derive(Clone, Copy)]  // Bitwise copy for simple stack types
+#[derive(Clone, Copy)]  // Bitwise copy (stack-only types)
 struct Point(i32, i32);
 ```
 
@@ -163,6 +230,49 @@ trait OutlinePrint: fmt::Display {
 
 Multiple supertraits: `trait CompSciStudent: Programmer + Student { ... }`
 
+Equivalent with where clause: `trait Circle where Self: Shape { fn radius(&self) -> f64; }`
+
+## Blanket Implementations
+
+Implement a trait for all types satisfying a bound:
+
+```rust
+// From the standard library: any Display type gets ToString
+impl<T: Display> ToString for T {
+    fn to_string(&self) -> String { /* ... */ }
+}
+```
+
+Write your own:
+```rust
+trait Greet {
+    fn greet(&self) -> String;
+}
+impl<T: fmt::Display> Greet for T {
+    fn greet(&self) -> String {
+        format!("Hello, {self}!")
+    }
+}
+```
+
+## Coherence & Orphan Rule
+
+You can implement a trait for a type only if **at least one of** the trait or the type is defined in your crate. This prevents conflicting implementations across crates.
+
+**Workaround -- Newtype pattern:** Wrap external types to implement external traits:
+
+```rust
+struct Wrapper(Vec<String>);
+
+impl fmt::Display for Wrapper {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[{}]", self.0.join(", "))
+    }
+}
+```
+
+Use `Deref` to forward method calls to the inner type if needed.
+
 ## Disambiguation
 
 When multiple traits have methods with the same name:
@@ -180,19 +290,21 @@ General form: `<Type as Trait>::function(receiver_if_method, args...)`
 
 For complete disambiguation examples, see [references/disambiguation.md](references/disambiguation.md).
 
-## Official Documentation
+## Standard Library Traits
 
+For detailed coverage of Display, Debug, From/Into, Default, AsRef/AsMut, Borrow, Send/Sync, Sized, Eq vs PartialEq, and Ord vs PartialOrd, see [references/standard-traits.md](references/standard-traits.md).
+
+## Advanced Patterns
+
+For sealed traits, extension traits, marker traits, GATs, and trait design guidelines, see [references/advanced-patterns.md](references/advanced-patterns.md).
+
+## Sources
+
+- [Traits (The Rust Book)](https://doc.rust-lang.org/book/ch10-02-traits.html)
+- [Advanced Traits (The Rust Book)](https://doc.rust-lang.org/book/ch20-02-advanced-traits.html)
 - [Traits (Rust by Example)](https://doc.rust-lang.org/rust-by-example/trait.html)
+- [Traits (Rust Reference)](https://doc.rust-lang.org/reference/items/traits.html)
+- [Trait Objects (Rust Reference)](https://doc.rust-lang.org/reference/types/trait-object.html)
+- [impl Trait (Rust Reference)](https://doc.rust-lang.org/reference/types/impl-trait.html)
 - [Derive attributes](https://doc.rust-lang.org/reference/attributes/derive.html)
-- [Dynamic dispatch (dyn)](https://doc.rust-lang.org/rust-by-example/trait/dyn.html)
-- [impl Trait](https://doc.rust-lang.org/rust-by-example/trait/impl_trait.html)
-- [Operator overloading](https://doc.rust-lang.org/rust-by-example/trait/ops.html)
-- [Add trait (core::ops)](https://doc.rust-lang.org/core/ops/trait.Add.html)
-- [Operators appendix](https://doc.rust-lang.org/book/appendix-02-operators.html)
-- [Drop](https://doc.rust-lang.org/rust-by-example/trait/drop.html)
-- [Iterators](https://doc.rust-lang.org/rust-by-example/trait/iter.html)
-- [Clone](https://doc.rust-lang.org/rust-by-example/trait/clone.html)
-- [Supertraits](https://doc.rust-lang.org/rust-by-example/trait/supertraits.html)
-- [Advanced traits (supertraits)](https://doc.rust-lang.org/book/ch20-02-advanced-traits.html#using-supertraits-to-require-one-traits-functionality-within-another-trait)
-- [Disambiguation](https://doc.rust-lang.org/rust-by-example/trait/disambiguating.html)
-- [Fully qualified syntax](https://doc.rust-lang.org/book/ch20-02-advanced-traits.html#fully-qualified-syntax-for-disambiguation-calling-methods-with-the-same-name)
+- [std::ops](https://doc.rust-lang.org/std/ops/index.html)
