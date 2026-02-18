@@ -55,6 +55,12 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 | [moebius-post-processing](skills/moebius-post-processing) | Moebius-style NPR: hand-drawn outlines, crosshatched shadows for R3F |
 | [retro-dithering-crt](skills/retro-dithering-crt) | Retro dithering, color quantization, CRT effects: Bayer, scanlines for R3F |
 
+### GPU / CUDA
+
+| Skill | Description |
+|-------|-------------|
+| [cuda-best-practices](skills/cuda-best-practices) | NVIDIA CUDA C/C++ GPU programming: kernels, memory hierarchy, coalescing, streams, profiling, Thrust/CUB |
+
 ### AI & Data
 
 | Skill | Description |
