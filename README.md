@@ -44,6 +44,7 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 | [tailwind-best-practices](skills/tailwind-best-practices) | Tailwind CSS v4: CSS-first @theme, @utility, @custom-variant, responsive, dark mode, animations, 3D transforms, v3-to-v4 migration, Next.js integration |
 | [fumadocs](skills/fumadocs) | Fumadocs documentation framework for Next.js: MDX, layouts, UI components, search, OpenAPI, i18n |
 | [drizzle-orm](skills/drizzle-orm) | Drizzle ORM: PostgreSQL schemas, queries, relations, migrations, Neon serverless |
+| [neon-best-practices](skills/neon-best-practices) | Neon serverless Postgres for Next.js: driver setup, connection pooling, branching, autoscaling, RLS, Neon Auth |
 | [tanstack-query](skills/tanstack-query) | TanStack Query v5: data fetching, caching, mutations, and SSR |
 | [tanstack-form](skills/tanstack-form) | TanStack Form v1: type-safe forms, validation, arrays, SSR |
 | [tanstack-table](skills/tanstack-table) | TanStack Table v8: headless tables, sorting, filtering, pagination, selection |
