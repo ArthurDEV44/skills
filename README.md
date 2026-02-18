@@ -44,6 +44,12 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 | [moebius-post-processing](skills/moebius-post-processing) | Moebius-style NPR: hand-drawn outlines, crosshatched shadows for R3F |
 | [retro-dithering-crt](skills/retro-dithering-crt) | Retro dithering, color quantization, CRT effects: Bayer, scanlines for R3F |
 
+### AI & Data
+
+| Skill | Description |
+|-------|-------------|
+| [rag-pgvector](skills/rag-pgvector) | RAG pipelines with pgvector: hybrid search, RRF fusion, chunking, reranking, citations |
+
 ### Tools & Workflows
 
 | Skill | Description |
