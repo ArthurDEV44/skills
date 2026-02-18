@@ -35,11 +35,13 @@ const store = new Store<TState>(initialState, options?: StoreOptions<TState>);
 interface StoreOptions<TState> {
   updateFn?: (prevValue: TState) => (updateFn: (prev: TState) => TState) => TState;
   onUpdate?: () => void;
+  onSubscribe?: (listener: () => void, store: Store<TState>) => (() => void) | void;
 }
 ```
 
 - `updateFn` — Transform updates before applying (middleware pattern).
 - `onUpdate` — Callback fired after every state update (primitive derived state).
+- `onSubscribe` — Lifecycle hook called when a new subscriber is added. Receives the listener and the store. Return a cleanup function that runs when the subscriber unsubscribes.
 
 ## Derived class
 

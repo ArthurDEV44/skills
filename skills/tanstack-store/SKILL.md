@@ -1,6 +1,6 @@
 ---
 name: tanstack-store
-description: "TanStack Store framework-agnostic reactive state management with Store, Derived, Effect, and batch. Use when writing, reviewing, or refactoring code that involves: (1) Creating or managing state with TanStack Store or @tanstack/store, (2) Using useStore hook from @tanstack/react-store, @tanstack/vue-store, @tanstack/solid-store, @tanstack/angular-store, @tanstack/svelte-store, or @tanstack/preact-store, (3) Creating derived/computed state with Derived class, (4) Managing side effects with Effect class, (5) Batching state updates with batch(), (6) Choosing a lightweight state management solution for framework-agnostic libraries."
+description: "TanStack Store framework-agnostic reactive state management with Store, Derived, Effect, and batch. Also powers TanStack Form's reactivity (form.store). Use when writing, reviewing, or refactoring code that involves: (1) Creating or managing state with TanStack Store or @tanstack/store, (2) Using useStore hook from @tanstack/react-store, @tanstack/vue-store, @tanstack/solid-store, @tanstack/angular-store, @tanstack/svelte-store, or @tanstack/preact-store, (3) Creating derived/computed state with Derived class, (4) Managing side effects with Effect class, (5) Batching state updates with batch(), (6) Subscribing to TanStack Form state via useStore(form.store, selector), (7) Choosing a lightweight state management solution for framework-agnostic libraries."
 ---
 
 # TanStack Store
@@ -100,7 +100,7 @@ batch(() => {
 }); // subscribers fire once with final state
 ```
 
-### Store options — updateFn and onUpdate
+### Store options — updateFn, onUpdate, onSubscribe
 
 ```typescript
 // Transform updates before applying
@@ -114,12 +114,21 @@ let double = 0;
 const count2 = new Store(0, {
   onUpdate: () => { double = count2.state * 2; },
 });
+
+// Subscriber lifecycle tracking via onSubscribe
+const tracked = new Store({ count: 0 }, {
+  onSubscribe: (listener, store) => {
+    console.log('subscriber added');
+    return () => console.log('subscriber removed');
+  },
+});
 ```
 
 ## React Adapter
 
 ```tsx
-import { Store, useStore } from '@tanstack/react-store';
+import { useStore, shallow } from '@tanstack/react-store';
+import { Store } from '@tanstack/store';
 
 const store = new Store({ dogs: 0, cats: 0 });
 
@@ -130,7 +139,43 @@ function Counter({ animal }: { animal: 'dogs' | 'cats' }) {
 }
 ```
 
-`useStore` accepts both `Store` and `Derived`. Use `shallow` from `@tanstack/react-store` for shallow equality comparison on selected objects/arrays.
+`useStore` accepts both `Store` and `Derived`. Pass `shallow` as 3rd argument for shallow equality comparison on selected objects/arrays:
+
+```tsx
+const info = useStore(store, (s) => ({ dogs: s.dogs, cats: s.cats }), shallow);
+```
+
+## Integration with TanStack Form
+
+TanStack Form uses TanStack Store internally for all its reactivity. Every `FormApi` instance exposes a `form.store` property that is a standard TanStack `Store`. This enables fine-grained subscriptions to form state:
+
+```tsx
+import { useStore } from '@tanstack/react-store';
+
+// Subscribe to specific form values (only re-renders when firstName changes)
+const firstName = useStore(form.store, (state) => state.values.firstName);
+
+// Subscribe to form error state
+const errors = useStore(form.store, (state) => state.errorMap);
+
+// Subscribe to submission state
+const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
+```
+
+The `form.Subscribe` component is a convenience wrapper around the same mechanism:
+
+```tsx
+<form.Subscribe
+  selector={(state) => [state.canSubmit, state.isSubmitting]}
+  children={([canSubmit, isSubmitting]) => (
+    <button type="submit" disabled={!canSubmit}>
+      {isSubmitting ? '...' : 'Submit'}
+    </button>
+  )}
+/>
+```
+
+**Performance note**: TanStack Form uses static class instances with reactive properties powered by TanStack Store. Context values are not directly reactive, preventing unnecessary re-renders from context propagation. Always use a selector with `useStore` — never do `useStore(form.store)` without one.
 
 ## References
 
