@@ -25,6 +25,7 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 | Skill | Description |
 |-------|-------------|
 | [angular-best-practices](skills/angular-best-practices) | Angular v20+: standalone components, signals, DI, routing, forms, HttpClient, SSR, zoneless |
+| [primeng](skills/primeng) | PrimeNG v20: 80+ Angular UI components, theming, design tokens, Table, Dialog, Forms |
 | [fumadocs](skills/fumadocs) | Fumadocs documentation framework for Next.js: MDX, layouts, UI components, search, OpenAPI, i18n |
 | [drizzle-orm](skills/drizzle-orm) | Drizzle ORM: PostgreSQL schemas, queries, relations, migrations, Neon serverless |
 | [tanstack-query](skills/tanstack-query) | TanStack Query v5: data fetching, caching, mutations, and SSR |
