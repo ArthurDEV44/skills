@@ -20,6 +20,12 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 | [clerk-rs-sdk](skills/clerk-rs-sdk) | clerk-rs Rust SDK: typed API calls, JWT validation, framework middleware |
 | [async-stripe](skills/async-stripe) | async-stripe Rust crate: OpenAPI codegen, typed Stripe API bindings |
 
+### Go
+
+| Skill | Description |
+|-------|-------------|
+| [go-best-practices](skills/go-best-practices) | Go idioms and modern patterns: error handling, interfaces, concurrency, generics, testing, project structure |
+
 ### Frontend & Web
 
 | Skill | Description |
