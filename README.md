@@ -8,6 +8,7 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 
 | Skill | Description |
 |-------|-------------|
+| [rust-best-practices](skills/rust-best-practices) | Idiomatic patterns, API design, Cargo tooling, Clippy, performance, documentation |
 | [rust-traits](skills/rust-traits) | Trait system best practices, patterns, and idiomatic usage |
 | [rust-ownership](skills/rust-ownership) | Ownership, borrowing, lifetimes, subtyping, and variance |
 | [rust-async](skills/rust-async) | Async/await patterns, futures, streams, and runtime usage |
