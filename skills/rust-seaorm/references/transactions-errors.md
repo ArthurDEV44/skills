@@ -36,14 +36,35 @@ db.transaction::<_, (), DbErr>(|txn| {
 
         Ok(())
     })
-}).await;
+}).await?;
+```
+
+### Returning Values from Transactions
+
+```rust
+let (bakery, chef) = db.transaction::<_, (bakery::Model, chef::Model), DbErr>(|txn| {
+    Box::pin(async move {
+        let bakery = bakery::ActiveModel {
+            name: Set("SeaSide Bakery".to_owned()),
+            ..Default::default()
+        }.insert(txn).await?;
+
+        let chef = chef::ActiveModel {
+            name: Set("Baker Bob".to_owned()),
+            bakery_id: Set(bakery.id),
+            ..Default::default()
+        }.insert(txn).await?;
+
+        Ok((bakery, chef))
+    })
+}).await?;
 ```
 
 ---
 
 ## Explicit Begin/Commit
 
-For complex lifetime scenarios:
+For complex lifetime scenarios or when closure-based approach is awkward:
 
 ```rust
 let txn = db.begin().await?;
@@ -63,43 +84,52 @@ bakery::ActiveModel {
 txn.commit().await?;
 ```
 
-**Auto-rollback**: Dropping `txn` without `commit()` automatically rolls back.
+**Auto-rollback**: Dropping `txn` without calling `commit()` automatically rolls back.
+
+```rust
+let txn = db.begin().await?;
+some_operation(&txn).await?;
+// If error occurs here, txn is dropped -> rollback
+txn.commit().await?;
+```
 
 ---
 
 ## Nested Transactions
 
-Uses database SAVEPOINTs. Nested transactions can independently commit or rollback.
+Uses database SAVEPOINTs. Nested transactions can independently commit or rollback without affecting the parent.
 
 ### Closure Nesting
 
 ```rust
-ctx.db.transaction::<_, _, DbErr>(|txn| {
+db.transaction::<_, _, DbErr>(|txn| {
     Box::pin(async move {
-        let _ = bakery::ActiveModel {..}.save(txn).await?;
-        assert_eq!(Bakery::find().all(txn).await?.len(), 1);
+        let _ = bakery_a().save(txn).await?;
 
         // Nested transaction (committed)
         txn.transaction::<_, _, DbErr>(|txn| {
             Box::pin(async move {
-                let _ = bakery::ActiveModel {..}.save(txn).await?;
+                let _ = bakery_b().save(txn).await?;
 
                 // Deeply nested (rollbacked)
                 assert!(txn.transaction::<_, _, DbErr>(|txn| {
                     Box::pin(async move {
-                        let _ = bakery::ActiveModel {..}.save(txn).await?;
+                        let _ = bakery_c().save(txn).await?;
                         Err(DbErr::Query(RuntimeErr::Internal(
                             "Force Rollback!".to_owned(),
                         )))
                     })
                 }).await.is_err());
 
+                // bakery_c is rolled back, bakery_b persists
                 Ok(())
             })
-        }).await;
+        }).await?;
+
         Ok(())
     })
-}).await;
+}).await?;
+// Result: bakery_a + bakery_b committed, bakery_c rolled back
 ```
 
 ### Begin/Commit Nesting
@@ -115,7 +145,7 @@ bakery_a().save(&txn).await?;
     {
         let deep = nested.begin().await?;
         bakery_c().save(&deep).await?;
-        // dropped without commit -> rollback
+        // dropped without commit -> bakery_c rolled back
     }
 
     nested.commit().await?; // bakery_b persists
@@ -128,7 +158,29 @@ txn.commit().await?; // bakery_a + bakery_b persist
 
 ## Isolation Levels & Access Modes
 
-Use `transaction_with_config` or `begin_with_config` (since v0.10.5, MySQL/PostgreSQL):
+Use `transaction_with_config` or `begin_with_config` (MySQL/PostgreSQL):
+
+```rust
+use sea_orm::{IsolationLevel, AccessMode};
+
+// Closure-based with config
+db.transaction_with_config::<_, (), DbErr>(
+    |txn| {
+        Box::pin(async move {
+            // operations...
+            Ok(())
+        })
+    },
+    Some(IsolationLevel::RepeatableRead),
+    Some(AccessMode::ReadOnly),
+).await?;
+
+// Explicit with config
+let txn = db.begin_with_config(
+    Some(IsolationLevel::Serializable),
+    Some(AccessMode::ReadWrite),
+).await?;
+```
 
 ### Isolation Levels
 
@@ -143,7 +195,7 @@ Use `transaction_with_config` or `begin_with_config` (since v0.10.5, MySQL/Postg
 
 | Mode | Behavior |
 |------|----------|
-| `ReadOnly` | Prevents data modifications |
+| `ReadOnly` | Prevents data modifications in txn |
 | `ReadWrite` | Allows modifications (default) |
 
 **Note**: MySQL executes `SET TRANSACTION` before `BEGIN`; PostgreSQL after `BEGIN`.
@@ -154,31 +206,44 @@ Use `transaction_with_config` or `begin_with_config` (since v0.10.5, MySQL/Postg
 
 ### Core Error Type: `DbErr`
 
-All runtime errors are represented as `DbErr`.
+All runtime errors are represented as `DbErr`. Common variants:
+
+| Variant | Description |
+|---------|-------------|
+| `DbErr::ConnectionAcquire` | Failed to acquire connection from pool |
+| `DbErr::Conn(RuntimeErr)` | Connection error |
+| `DbErr::Exec(RuntimeErr)` | Execution error |
+| `DbErr::Query(RuntimeErr)` | Query error |
+| `DbErr::RecordNotFound(String)` | Record not found |
+| `DbErr::AttrNotSet(String)` | Attribute not set on ActiveModel |
+| `DbErr::Custom(String)` | Custom error message |
+| `DbErr::Type(String)` | Type conversion error |
+| `DbErr::Json(String)` | JSON operation error |
+| `DbErr::Migration(String)` | Migration error |
 
 ### Standard SQL Errors via `sql_err()`
 
-Converts to cross-database `SqlErr`:
+Converts to cross-database `SqlErr` for portable error handling:
 
 ```rust
 // Unique constraint violation
-assert!(matches!(
-    cake.into_active_model().insert(db).await
-        .expect_err("Duplicate primary key")
-        .sql_err(),
-    Some(SqlErr::UniqueConstraintViolation(_))
-));
-
-// Foreign key constraint violation
-assert!(matches!(
-    fk_cake.insert(db).await
-        .expect_err("Invalid foreign key")
-        .sql_err(),
-    Some(SqlErr::ForeignKeyConstraintViolation(_))
-));
+match cake.into_active_model().insert(db).await {
+    Err(err) => match err.sql_err() {
+        Some(SqlErr::UniqueConstraintViolation(msg)) => {
+            println!("Duplicate: {}", msg);
+        }
+        Some(SqlErr::ForeignKeyConstraintViolation(msg)) => {
+            println!("FK error: {}", msg);
+        }
+        _ => return Err(err),
+    },
+    Ok(model) => { /* success */ }
+}
 ```
 
 ### Database-Specific Error Codes
+
+When you need the raw database error code:
 
 ```rust
 let error: DbErr = cake.into_active_model().insert(db).await
@@ -189,10 +254,49 @@ match error {
         sqlx::Error::Database(e) => {
             // MySQL: "23000" (ER_DUP_KEY)
             // PostgreSQL: "23505" (unique_violation)
-            assert_eq!(e.code().unwrap(), "23000");
+            let code = e.code().unwrap();
+            let message = e.message();
         }
         _ => panic!("Unexpected sqlx error"),
     },
     _ => panic!("Unexpected DbErr"),
+}
+```
+
+### RecordNotFound Handling
+
+```rust
+let cake = Cake::find_by_id(999).one(db).await?;
+match cake {
+    Some(model) => { /* found */ }
+    None => { /* not found - no error, just None */ }
+}
+
+// When using one() vs one_or_err():
+// .one(db) -> Result<Option<Model>, DbErr>
+// For delete_by_id, non-existent returns error
+```
+
+### Custom Error Integration
+
+```rust
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("Database error: {0}")]
+    Db(#[from] sea_orm::DbErr),
+    #[error("Not found: {0}")]
+    NotFound(String),
+    #[error("Validation: {0}")]
+    Validation(String),
+}
+
+// Use in service layer
+async fn get_cake(db: &DatabaseConnection, id: i32) -> Result<cake::Model, AppError> {
+    Cake::find_by_id(id)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Cake {} not found", id)))
 }
 ```
