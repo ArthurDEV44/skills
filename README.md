@@ -37,6 +37,7 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 
 | Skill | Description |
 |-------|-------------|
+| [react-three-fiber](skills/react-three-fiber) | React Three Fiber: Canvas, hooks, events, drei, performance, models, portals |
 | [web-3d-shaders](skills/web-3d-shaders) | Shaders & real-time 3D on the Web: GLSL, Three.js, R3F, WebGPU |
 | [tsl-webgpu](skills/tsl-webgpu) | TSL (Three.js Shading Language) and WebGPU: shaders, compute, node materials |
 | [volumetric-lighting](skills/volumetric-lighting) | Volumetric lighting with post-processing raymarching for R3F/Three.js |
