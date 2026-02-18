@@ -124,7 +124,22 @@ validators={{
 }}
 ```
 
-Sync and async can coexist. Sync runs first; async runs only if sync passes (unless `asyncAlways: true`).
+Sync and async can coexist. Sync runs first; async runs only if sync passes. To force async to run even when sync fails, set `asyncAlways: true` on the field:
+
+```tsx
+<form.Field
+  name="email"
+  asyncAlways={true}
+  validators={{
+    onChange: ({ value }) => !value ? 'Required' : undefined,
+    onChangeAsync: async ({ value }) => {
+      // Runs even if sync onChange fails
+      const exists = await checkEmailExists(value)
+      return exists ? 'Email taken' : undefined
+    },
+  }}
+/>
+```
 
 ## Debouncing
 

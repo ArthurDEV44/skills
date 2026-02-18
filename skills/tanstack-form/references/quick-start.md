@@ -128,9 +128,11 @@ const form = useForm({
 
 ### formOptions
 
-Share config between forms:
+Share config between forms. Import from `@tanstack/react-form` (or adapter package for SSR):
 
 ```tsx
+import { formOptions } from '@tanstack/react-form'
+
 const formOpts = formOptions({ defaultValues: { firstName: '', lastName: '' } })
 const form = useForm({ ...formOpts, onSubmit: async ({ value }) => console.log(value) })
 ```
@@ -152,7 +154,7 @@ const form = useForm({ ...formOpts, onSubmit: async ({ value }) => console.log(v
 
 ESLint config for `children` as prop:
 ```json
-{ "rules": { "react/no-children-prop": [true, { "allowFunctions": true }] } }
+{ "rules": { "react/no-children-prop": ["warn", { "allowFunctions": true }] } }
 ```
 
 ### Field State

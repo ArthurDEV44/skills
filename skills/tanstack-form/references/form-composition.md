@@ -167,7 +167,20 @@ Usage in forms - `fields` prop specifies location:
 <FieldGroupPasswordFields form={form} fields={{ password: 'password', confirm_password: 'confirm_password' }} />
 ```
 
-`createFieldMap(defaultValues)` helper generates identity mapping for top-level fields.
+`createFieldMap(defaultValues)` helper generates identity mapping for top-level fields:
+
+```tsx
+import { createFieldMap } from '@tanstack/react-form'
+
+type PasswordFields = { password: string; confirm_password: string }
+
+// Creates: { password: 'password', confirm_password: 'confirm_password' }
+const passwordFieldMap = createFieldMap<PasswordFields>()
+
+// Equivalent to manually writing:
+// <FieldGroupPasswordFields form={form} fields={{ password: 'password', confirm_password: 'confirm_password' }} />
+<FieldGroupPasswordFields form={form} fields={passwordFieldMap} />
+```
 
 `group` object provides: `AppField`, `AppForm`, `Field`, `Subscribe`, `store`, `getFieldValue`, `form` (parent form).
 

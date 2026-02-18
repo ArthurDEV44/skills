@@ -102,14 +102,17 @@ listeners={{
 }}
 ```
 
-Form-level listeners (propagated to children for onChange/onBlur):
+Form-level listeners (propagated to children for onChange/onBlur). `onChange`/`onBlur` receive both `formApi` and `fieldApi` (the field that triggered the event):
 ```tsx
 const form = useForm({
   listeners: {
     onMount: ({ formApi }) => loggingService('mount', formApi.state.values),
     onChange: ({ formApi, fieldApi }) => {
-      if (formApi.state.isValid) formApi.handleSubmit()
-      console.log(fieldApi.name, fieldApi.state.value)
+      // fieldApi identifies which field triggered the change
+      console.log(`Field "${fieldApi.name}" changed to:`, fieldApi.state.value)
+      if (formApi.state.isValid && formApi.state.isDirty) {
+        console.log('Auto-saving...', formApi.state.values)
+      }
     },
     onChangeDebounceMs: 500,
   },
