@@ -17,6 +17,10 @@ let n = stream.read(&mut buf).await?;
 // Read everything to end
 let mut data = Vec::new();
 stream.read_to_end(&mut data).await?;
+
+// Read exactly N bytes (errors if EOF before N)
+let mut exact = [0u8; 64];
+stream.read_exact(&mut exact).await?;
 ```
 
 ### Writing
@@ -34,6 +38,9 @@ stream.write_all(b"hello").await?;
 ```rust
 // Copy all bytes from reader to writer
 tokio::io::copy(&mut reader, &mut writer).await?;
+
+// Bidirectional copy (useful for proxies)
+tokio::io::copy_bidirectional(&mut stream_a, &mut stream_b).await?;
 ```
 
 ### Helpers
@@ -42,6 +49,9 @@ tokio::io::copy(&mut reader, &mut writer).await?;
 tokio::io::stdin()   // async stdin
 tokio::io::stdout()  // async stdout
 tokio::io::stderr()  // async stderr
+tokio::io::empty()   // yields EOF immediately
+tokio::io::sink()    // discards all written data
+tokio::io::repeat(0) // infinite stream of a byte
 ```
 
 ## Socket Splitting
@@ -147,14 +157,40 @@ stream.write_all(b"\r\n").await?;
 stream.flush().await?; // ensure data reaches socket
 ```
 
+### tokio_util::codec (frame codecs)
+
+For production framing, use `tokio_util::codec`:
+
+```rust
+use tokio_util::codec::{Framed, LinesCodec, Decoder, Encoder};
+
+let framed = Framed::new(socket, LinesCodec::new());
+
+// Read frames
+while let Some(line) = framed.next().await {
+    let line = line?;
+    println!("got line: {line}");
+}
+
+// Write frames
+framed.send("hello".to_string()).await?;
+```
+
+Built-in codecs: `LinesCodec`, `BytesCodec`, `LengthDelimitedCodec`.
+
+Custom codec: implement `Decoder` and `Encoder` traits.
+
 ### Tips
 
 - Allocate buffers on the heap (`Vec`, `BytesMut`) not the stack -- keeps task struct small
 - Always check for `Ok(0)` (EOF) to avoid infinite loops
 - Use `bytes` crate (`Bytes`, `BytesMut`) for zero-copy buffer management
 - `Bytes::clone()` is cheap (reference-counted, no data copy)
+- Prefer `read_buf(&mut BytesMut)` over `read(&mut [u8])` to avoid manual cursor management
 
 ## Sources
 
 - [I/O tutorial](https://tokio.rs/tokio/tutorial/io)
 - [Framing tutorial](https://tokio.rs/tokio/tutorial/framing)
+- [tokio::io module](https://docs.rs/tokio/latest/tokio/io/index.html)
+- [tokio_util::codec](https://docs.rs/tokio-util/latest/tokio_util/codec/index.html)

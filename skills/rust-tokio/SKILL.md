@@ -1,15 +1,14 @@
 ---
 name: rust-tokio
 description: >
-  Tokio async runtime for Rust: task spawning, shared state, channels (mpsc/oneshot/broadcast/watch),
-  async I/O, select! macro, streams, graceful shutdown, sync-async bridging, testing, and tracing.
-  Use when writing, reviewing, or refactoring Rust code using Tokio: (1) Setting up a Tokio project
-  with Cargo.toml feature flags, (2) Spawning tasks with tokio::spawn and JoinHandle, (3) Sharing
-  state with Arc and Mutex across tasks, (4) Using mpsc/oneshot/broadcast/watch channels, (5) Async
-  TCP/UDP I/O with AsyncRead/AsyncWrite, (6) Using tokio::select! for multiplexing futures,
-  (7) Working with tokio-stream and StreamExt, (8) Implementing graceful shutdown with
-  CancellationToken, (9) Bridging sync and async code, (10) Testing with #[tokio::test] and
-  time pausing, (11) Adding tracing instrumentation.
+  Tokio async runtime for Rust: task spawning, JoinSet, shared state, channels (mpsc/oneshot/broadcast/watch),
+  sync primitives (Notify/Semaphore/Barrier/RwLock), timers (sleep/timeout/interval), async I/O, select!,
+  streams, graceful shutdown, sync-async bridging, testing, tracing. Use when writing or reviewing Tokio code:
+  (1) Spawning tasks with tokio::spawn, JoinSet, JoinHandle, (2) Sharing state with Arc/Mutex,
+  (3) Using channels or sync primitives, (4) Working with timeout/interval/sleep,
+  (5) Async TCP/UDP I/O with AsyncRead/AsyncWrite, (6) Using select! for multiplexing,
+  (7) tokio-stream and StreamExt, (8) Graceful shutdown with CancellationToken/TaskTracker,
+  (9) Bridging sync/async, (10) Testing with #[tokio::test], (11) Tracing, (12) Runtime Builder/LocalSet.
 ---
 
 # Rust Tokio
@@ -22,7 +21,7 @@ description: >
 tokio = { version = "1", features = ["full"] }
 ```
 
-Feature flags: `rt`, `rt-multi-thread`, `net`, `fs`, `io-util`, `io-std`, `time`, `sync`, `signal`, `process`, `macros`. Use `"full"` for all.
+Feature flags: `rt`, `rt-multi-thread`, `net`, `fs`, `io-util`, `io-std`, `time`, `sync`, `signal`, `process`, `macros`. Use `"full"` for all. For production, pick only what you need.
 
 ## Runtime & Entry Point
 
@@ -45,6 +44,23 @@ fn main() {
 }
 ```
 
+Use `#[tokio::main(flavor = "current_thread")]` for single-threaded runtime (lighter, no Send requirement on spawned tasks when using LocalSet).
+
+### Runtime Builder
+
+```rust
+let rt = tokio::runtime::Builder::new_multi_thread()
+    .worker_threads(4)           // default: num CPUs
+    .thread_name("my-worker")
+    .thread_stack_size(3 * 1024 * 1024)
+    .enable_all()                // enable io + time
+    .build()?;
+
+rt.block_on(async { /* ... */ });
+```
+
+For details on Builder options and LocalSet, see [references/timers-runtime.md](references/timers-runtime.md).
+
 ## Task Spawning
 
 ```rust
@@ -60,6 +76,41 @@ let result = handle.await.unwrap();
 - **'static bound**: task must own all data. Use `move` to transfer ownership.
 - **Send bound**: all data held across `.await` must be `Send`. `Rc` across `.await` fails; scope it or use `Arc`.
 - `spawn_blocking(|| { ... })` for CPU-bound/blocking work on dedicated threads.
+
+### JoinSet (managing groups of tasks)
+
+```rust
+use tokio::task::JoinSet;
+
+let mut set = JoinSet::new();
+
+for i in 0..10 {
+    set.spawn(async move { expensive_work(i).await });
+}
+
+// Collect results as they complete (unordered)
+while let Some(result) = set.join_next().await {
+    let val = result?; // JoinError if task panicked
+    println!("got: {val}");
+}
+```
+
+- `set.abort_all()` cancels all tasks in the set
+- `set.len()` / `set.is_empty()` for status checks
+- `set.shutdown().await` aborts all and waits for completion
+- `set.spawn_blocking(|| { ... })` for blocking tasks in the set
+- Dropping a JoinSet aborts all tasks in it
+
+### Aborting tasks
+
+```rust
+let handle = tokio::spawn(async { long_running().await });
+handle.abort();  // request cancellation
+// await returns JoinError with is_cancelled() == true
+assert!(handle.await.unwrap_err().is_cancelled());
+```
+
+Note: `spawn_blocking` tasks cannot be aborted (they run on OS threads).
 
 ## Shared State
 
@@ -106,6 +157,60 @@ let (tx, rx) = tokio::sync::oneshot::channel();
 tx.send("response").unwrap(); // no .await needed
 let val = rx.await?;
 ```
+
+## Sync Primitives
+
+| Primitive | Purpose | Key method |
+|-----------|---------|------------|
+| `Notify` | Wake one/all waiters | `notify_one()`, `notify_waiters()`, `notified().await` |
+| `Semaphore` | Limit concurrency | `acquire().await`, `try_acquire()`, `add_permits()` |
+| `Barrier` | Sync N tasks at a point | `wait().await` (returns `BarrierWaitResult`) |
+| `RwLock` | Async reader-writer lock | `read().await`, `write().await` |
+
+```rust
+// Notify: signal between tasks
+let notify = Arc::new(tokio::sync::Notify::new());
+let n = notify.clone();
+tokio::spawn(async move { n.notified().await; /* woken */ });
+notify.notify_one();
+
+// Semaphore: limit concurrent operations
+let sem = Arc::new(tokio::sync::Semaphore::new(3)); // 3 permits
+let permit = sem.acquire().await?;
+do_work().await;
+drop(permit); // release
+
+// Barrier: wait for all tasks to reach a point
+let barrier = Arc::new(tokio::sync::Barrier::new(5));
+let b = barrier.clone();
+tokio::spawn(async move { b.wait().await; /* all 5 arrived */ });
+```
+
+For detailed patterns, see [references/sync-primitives.md](references/sync-primitives.md).
+
+## Timers
+
+```rust
+use tokio::time::{self, Duration, Instant};
+
+// Sleep
+time::sleep(Duration::from_secs(1)).await;
+
+// Timeout: wrap any future with a deadline
+match time::timeout(Duration::from_secs(5), fetch_data()).await {
+    Ok(result) => println!("got: {result:?}"),
+    Err(_) => println!("timed out"),
+}
+
+// Interval: periodic ticks
+let mut interval = time::interval(Duration::from_millis(100));
+loop {
+    interval.tick().await;
+    do_periodic_work();
+}
+```
+
+For MissedTickBehavior, interval_at, sleep reset patterns, see [references/timers-runtime.md](references/timers-runtime.md).
 
 ## select! Macro
 

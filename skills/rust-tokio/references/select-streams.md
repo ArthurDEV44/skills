@@ -126,6 +126,33 @@ tokio::select! {
 }
 ```
 
+### biased mode
+
+By default, select! randomizes which ready branch to check first (fair). Use `biased` to check in top-to-bottom order:
+
+```rust
+tokio::select! {
+    biased;
+    _ = high_priority() => { /* checked first */ }
+    _ = low_priority() => { /* checked second */ }
+}
+```
+
+Useful when you want to prioritize certain branches (e.g., shutdown signals over new work).
+
+### Cancellation safety
+
+When a branch is dropped (another branch completed), the future is cancelled at its last `.await`. Some operations are **not cancellation-safe**:
+
+| Safe | Unsafe |
+|------|--------|
+| `rx.recv()` (mpsc) | `reader.read(&mut buf)` -- partial read lost |
+| `oneshot::Receiver::await` | `tokio::io::AsyncReadExt::read_exact` |
+| `sleep().await` | Custom futures that buffer internal state |
+| `JoinHandle::await` | |
+
+For unsafe operations in select!, use `tokio::pin!` + `&mut` to avoid cancellation, or buffer results yourself.
+
 ## Streams (tokio-stream)
 
 ```toml
@@ -167,11 +194,17 @@ let stream = subscriber.into_stream()
     .take(3); // stop after 3 items
 ```
 
+Other adapters: `filter_map`, `fold`, `collect`, `chain`, `zip`, `merge`, `throttle`, `chunks_timeout`.
+
 ### Creating streams
 
 ```rust
 // From iterator
 let stream = tokio_stream::iter(vec![1, 2, 3]);
+
+// From interval
+use tokio_stream::wrappers::IntervalStream;
+let stream = IntervalStream::new(tokio::time::interval(Duration::from_secs(1)));
 
 // Using async-stream crate
 use async_stream::stream;
@@ -181,6 +214,24 @@ let s = stream! {
         yield i;
     }
 };
+```
+
+### Stream wrappers (tokio-stream)
+
+`tokio_stream::wrappers` provides Stream impls for Tokio types:
+- `ReceiverStream` -- wraps `mpsc::Receiver`
+- `UnboundedReceiverStream` -- wraps `mpsc::UnboundedReceiver`
+- `BroadcastStream` -- wraps `broadcast::Receiver`
+- `WatchStream` -- wraps `watch::Receiver`
+- `IntervalStream` -- wraps `Interval`
+- `TcpListenerStream` -- wraps `TcpListener`
+
+```rust
+use tokio_stream::wrappers::ReceiverStream;
+
+let (tx, rx) = tokio::sync::mpsc::channel(32);
+let mut stream = ReceiverStream::new(rx);
+while let Some(val) = stream.next().await { /* ... */ }
 ```
 
 ### Stream trait
@@ -199,3 +250,5 @@ Use `StreamExt` (from tokio-stream or futures) for `.next()`, `.filter()`, `.map
 
 - [Select tutorial](https://tokio.rs/tokio/tutorial/select)
 - [Streams tutorial](https://tokio.rs/tokio/tutorial/streams)
+- [select! macro](https://docs.rs/tokio/latest/tokio/macro.select.html)
+- [tokio-stream](https://docs.rs/tokio-stream/latest/tokio_stream/)
