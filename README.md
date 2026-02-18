@@ -24,6 +24,7 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 
 | Skill | Description |
 |-------|-------------|
+| [fumadocs](skills/fumadocs) | Fumadocs documentation framework for Next.js: MDX, layouts, UI components, search, OpenAPI, i18n |
 | [drizzle-orm](skills/drizzle-orm) | Drizzle ORM: PostgreSQL schemas, queries, relations, migrations, Neon serverless |
 | [tanstack-query](skills/tanstack-query) | TanStack Query v5: data fetching, caching, mutations, and SSR |
 | [tanstack-form](skills/tanstack-form) | TanStack Form v1: type-safe forms, validation, arrays, SSR |
