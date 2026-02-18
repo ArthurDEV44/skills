@@ -122,19 +122,23 @@ const columns = [
   // Group Column
   columnHelper.group({
     header: 'Name',
+    footer: props => props.column.id,
     columns: [
       columnHelper.accessor('firstName', {
         cell: info => info.getValue(),
+        footer: props => props.column.id,
       }),
       columnHelper.accessor(row => row.lastName, {
         id: 'lastName',
         header: () => <span>Last Name</span>,
+        footer: props => props.column.id,
       }),
     ],
   }),
   // Accessor Column
   columnHelper.accessor('age', {
     header: () => 'Age',
+    footer: props => props.column.id,
   }),
 ]
 ```
@@ -172,6 +176,29 @@ columnHelper.accessor('firstName', {
 })
 ```
 
+### Column Def Without Column Helper
+
+```tsx
+const columns: ColumnDef<Person>[] = [
+  {
+    accessorKey: 'firstName',
+    header: 'First Name',
+    cell: info => info.getValue(),
+  },
+  {
+    accessorFn: row => row.lastName,
+    id: 'lastName',
+    header: () => <span>Last Name</span>,
+    cell: info => info.getValue(),
+  },
+  {
+    id: 'select',
+    header: ({ table }) => <Checkbox {...} />,
+    cell: ({ row }) => <Checkbox {...} />,
+  },
+]
+```
+
 ## Table Instance
 
 ### Creating
@@ -188,6 +215,24 @@ const table = createSolidTable({ columns, data })
 
 // Svelte
 const table = createSvelteTable({ columns, data })
+```
+
+### Key Table Options
+
+```tsx
+const table = useReactTable({
+  data,                    // Required: TData[]
+  columns,                 // Required: ColumnDef<TData>[]
+  getCoreRowModel: getCoreRowModel(), // Required
+  getRowId: row => row.uuid,         // Custom row ID (default: row index)
+  defaultColumn: {                   // Shared defaults for all columns
+    size: 150,
+    minSize: 50,
+    maxSize: 500,
+    enableSorting: true,
+  },
+  debugTable: true,        // Log table state changes (dev only)
+})
 ```
 
 ### Table State
@@ -208,7 +253,9 @@ import { flexRender } from '@tanstack/react-table'
   <tr key={headerGroup.id}>
     {headerGroup.headers.map(header => (
       <th key={header.id} colSpan={header.colSpan}>
-        {flexRender(header.column.columnDef.header, header.getContext())}
+        {header.isPlaceholder
+          ? null
+          : flexRender(header.column.columnDef.header, header.getContext())}
       </th>
     ))}
   </tr>
@@ -224,6 +271,45 @@ import { flexRender } from '@tanstack/react-table'
     ))}
   </tr>
 ))}
+
+// Footers
+{table.getFooterGroups().map(footerGroup => (
+  <tr key={footerGroup.id}>
+    {footerGroup.headers.map(header => (
+      <th key={header.id} colSpan={header.colSpan}>
+        {header.isPlaceholder
+          ? null
+          : flexRender(header.column.columnDef.footer, header.getContext())}
+      </th>
+    ))}
+  </tr>
+))}
+```
+
+## Type-Safe Column Meta
+
+Extend `ColumnMeta` to add custom metadata to column definitions:
+
+```tsx
+import { type RowData } from '@tanstack/react-table'
+
+declare module '@tanstack/react-table' {
+  interface ColumnMeta<TData extends RowData, TValue> {
+    filterVariant?: 'text' | 'range' | 'select'
+    headerClassName?: string
+    align?: 'left' | 'center' | 'right'
+  }
+}
+
+// Use in column defs
+columnHelper.accessor('age', {
+  header: 'Age',
+  meta: { filterVariant: 'range', align: 'right' },
+})
+
+// Access in rendering
+const meta = header.column.columnDef.meta
+const align = meta?.align ?? 'left'
 ```
 
 ## Row Models
@@ -246,7 +332,7 @@ import {
 
 ### Execution Order
 
-`getCoreRowModel` → `getFilteredRowModel` → `getGroupedRowModel` → `getSortedRowModel` → `getExpandedRowModel` → `getPaginationRowModel` → `getRowModel`
+`getCoreRowModel` -> `getFilteredRowModel` -> `getGroupedRowModel` -> `getSortedRowModel` -> `getExpandedRowModel` -> `getPaginationRowModel` -> `getRowModel`
 
 ### Row Model Data Structure
 
@@ -255,15 +341,31 @@ Each row model provides:
 - `flatRows` - All sub-rows flattened to top level
 - `rowsById` - Object keyed by row `id`
 
+### Accessing Different Row Models
+
+```ts
+table.getCoreRowModel()       // All rows before any processing
+table.getFilteredRowModel()   // Rows after filtering
+table.getSortedRowModel()     // Rows after sorting
+table.getGroupedRowModel()    // Rows after grouping
+table.getExpandedRowModel()   // Rows after expanding
+table.getPaginationRowModel() // Rows for current page
+table.getRowModel()           // Final row model (after all processing)
+table.getPreFilteredRowModel() // Rows before filtering (useful for faceting)
+```
+
 ## Row APIs
 
 - `row.id` - Unique ID (customize with `getRowId` table option)
+- `row.index` - Index within parent array
 - `row.getValue(columnId)` - Cached accessor value
 - `row.renderValue(columnId)` - Like getValue but returns fallback if undefined
 - `row.original` - Original unmodified data object
 - `row.subRows` - Sub-rows array
 - `row.depth` - Nesting depth (0 for root)
 - `row.parentId` / `row.getParentRow()` - Parent row reference
+- `row.getAllCells()` - All cells (including hidden)
+- `row.getVisibleCells()` - Only visible cells (respects column visibility)
 
 ## Cell APIs
 
@@ -279,6 +381,16 @@ Each row model provides:
 - `header.column` - Associated Column object
 - `header.headerGroup` - Parent HeaderGroup
 - `header.colSpan` / `header.rowSpan` - Span values
-- `header.isPlaceholder` - True for placeholder headers
+- `header.isPlaceholder` - True for placeholder headers (always check before rendering)
 - `header.subHeaders` - Child headers array
 - `header.getContext()` - Rendering context for flexRender
+
+## Column APIs
+
+- `column.id` - Column identifier
+- `column.columnDef` - Original column definition object
+- `column.columns` - Child columns (for group columns)
+- `column.parent` - Parent column (if nested)
+- `column.depth` - Nesting depth
+- `column.getFlatColumns()` - All leaf columns
+- `column.getLeafColumns()` - Only leaf columns (no groups)
