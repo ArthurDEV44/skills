@@ -1,6 +1,6 @@
 # Axum Extractors Reference
 
-Source: https://docs.rs/axum/0.8.8/axum/extract/index.html
+Source: https://docs.rs/axum/0.8/axum/extract/index.html
 
 ## Overview
 
@@ -10,6 +10,7 @@ Extractors automatically parse typed data from HTTP requests. Handler functions 
 - Only ONE extractor may consume the request body per handler
 - Body-consuming extractors MUST be the last parameter
 - Extractors run sequentially in parameter order
+- Maximum 16 extractors per handler
 
 ## Body Extractors (must be last)
 
@@ -34,7 +35,7 @@ async fn get_user(Path(id): Path<Uuid>) -> Json<User> {
 }
 ```
 
-Rejection: `JsonRejection`. Use `from_bytes(&[u8])` for manual construction.
+Rejection: `JsonRejection` (subtypes: `JsonDataError`, `JsonSyntaxError`, `MissingJsonContentType`).
 
 ### Form\<T\> (feature: `form`)
 
@@ -49,6 +50,8 @@ async fn accept_form(Form(sign_up): Form<SignUp>) { /* ... */ }
 
 Also works as response (sets `application/x-www-form-urlencoded`).
 
+Rejection: `FormRejection` (subtypes: `FailedToDeserializeForm`, `FailedToDeserializeFormBody`, `InvalidFormContentType`).
+
 ### Multipart (feature: `multipart`)
 
 Parses `multipart/form-data` for file uploads:
@@ -57,6 +60,8 @@ Parses `multipart/form-data` for file uploads:
 async fn upload(mut multipart: Multipart) {
     while let Some(field) = multipart.next_field().await.unwrap() {
         let name = field.name().unwrap().to_string();
+        let file_name = field.file_name().map(|f| f.to_string());
+        let content_type = field.content_type().map(|c| c.to_string());
         let data = field.bytes().await.unwrap();
         println!("Length of `{name}` is {} bytes", data.len());
     }
@@ -100,7 +105,7 @@ async fn show(Path(params): Path<Params>) { /* ... */ }
 async fn params(Path(params): Path<HashMap<String, String>>) { /* ... */ }
 ```
 
-`Option<Path<T>>` for optional path params. Rejection: `PathRejection`.
+`Option<Path<T>>` for optional path params. Rejection: `PathRejection` (subtypes: `FailedToDeserializePathParams`, `InvalidUtf8InPathParam`).
 
 ### Query\<T\> (feature: `query`)
 
@@ -114,6 +119,8 @@ async fn list(Query(pagination): Query<Pagination>) { /* ... */ }
 ```
 
 For duplicate keys (`?foo=1&foo=2`), use `axum_extra::extract::Query`.
+
+Rejection: `QueryRejection` (subtypes: `FailedToDeserializeQueryString`).
 
 ### State\<S\>
 
@@ -154,9 +161,29 @@ async fn handler(State(state): State<AppState>) {
 
 Use `tokio::sync::Mutex` if holding across `.await` points.
 
+### Host
+
+Extracts the host from the request (checks `Host` header first, then request URI):
+
+```rust
+use axum::extract::Host;
+
+async fn handler(Host(hostname): Host) -> String {
+    format!("Requested host: {hostname}")
+}
+```
+
 ### HeaderMap
 
-All request headers.
+All request headers:
+
+```rust
+async fn handler(headers: HeaderMap) {
+    if let Some(auth) = headers.get("authorization") {
+        // ...
+    }
+}
+```
 
 ### Extension\<T\>
 
@@ -168,7 +195,13 @@ async fn handler(Extension(user): Extension<CurrentUser>) { /* ... */ }
 
 ### MatchedPath
 
-The matched route pattern string (e.g., `/users/{id}`).
+The matched route pattern string (e.g., `/users/{id}`):
+
+```rust
+async fn handler(MatchedPath(path): MatchedPath) {
+    println!("Matched: {path}"); // "/users/{id}"
+}
+```
 
 ### NestedPath
 
@@ -270,6 +303,32 @@ where
 }
 ```
 
+### RequestExt — Manual Extraction in Middleware
+
+Use `RequestExt` to run extractors manually from a `Request`:
+
+```rust
+use axum::RequestExt;
+
+async fn my_middleware(mut req: Request, next: Next) -> Response {
+    // Extract parts without consuming body
+    let path = req.extract_parts::<Path<HashMap<String, String>>>().await.unwrap();
+
+    // Extract with body consumption
+    let Json(body) = req.extract::<Json<Value>, _>().await.unwrap();
+
+    next.run(req).await
+}
+```
+
 ### Optional Extractors
 
-Wrap in `Option<T>` or `Result<T, T::Rejection>` for graceful failure handling.
+Wrap in `Option<T>` or `Result<T, T::Rejection>` for graceful failure handling:
+
+```rust
+// Returns None instead of rejecting
+async fn handler(user: Option<Extension<CurrentUser>>) { /* ... */ }
+
+// Returns Err with the rejection instead of rejecting
+async fn handler(user: Result<Extension<CurrentUser>, ExtensionRejection>) { /* ... */ }
+```

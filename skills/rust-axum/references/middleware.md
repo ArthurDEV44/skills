@@ -1,6 +1,6 @@
 # Axum Middleware Reference
 
-Source: https://docs.rs/axum/0.8.8/axum/middleware/index.html
+Source: https://docs.rs/axum/0.8/axum/middleware/index.html
 
 ## Overview
 
@@ -28,6 +28,12 @@ let app = Router::new()
     );
 ```
 
+**`layer()` vs `route_layer()`:**
+- `layer()` — applies to ALL requests (including unmatched routes)
+- `route_layer()` — applies ONLY to matched routes (unmatched get 404 without running middleware)
+
+Use `route_layer()` for auth middleware so unauthenticated users still get 404 for non-existent routes.
+
 ## Writing Middleware
 
 ### 1. from_fn — Quick async middleware
@@ -47,7 +53,7 @@ let app = Router::new()
     .layer(middleware::from_fn(my_middleware));
 ```
 
-With extractors:
+With extractors (extractors run before the inner service):
 
 ```rust
 async fn auth(
@@ -55,14 +61,14 @@ async fn auth(
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    match headers.get("authorization") {
-        Some(_) => Ok(next.run(request).await),
-        None => Err(StatusCode::UNAUTHORIZED),
+    match get_token(&headers) {
+        Some(token) if token_is_valid(token) => Ok(next.run(request).await),
+        _ => Err(StatusCode::UNAUTHORIZED),
     }
 }
 ```
 
-**With state** — use `from_fn_with_state()`:
+**With state** — use `from_fn_with_state()` (`from_fn` does NOT support `State`):
 
 ```rust
 async fn check_state(
@@ -70,12 +76,14 @@ async fn check_state(
     request: Request,
     next: Next,
 ) -> Response {
+    // use state...
     next.run(request).await
 }
 
+let state = AppState { /* ... */ };
 let app = Router::new()
     .route("/", get(handler))
-    .layer(middleware::from_fn_with_state(state.clone(), check_state))
+    .route_layer(middleware::from_fn_with_state(state.clone(), check_state))
     .with_state(state);
 ```
 
@@ -99,7 +107,9 @@ let app = Router::new()
     .route_layer(middleware::from_extractor::<RequireAuth>());
 ```
 
-### 3. Tower Combinators
+### 3. map_request / map_response
+
+Simple request/response transformations:
 
 ```rust
 use tower::ServiceBuilder;
@@ -113,6 +123,26 @@ let app = Router::new()
     );
 ```
 
+**With state** — `map_request_with_state` / `map_response_with_state`:
+
+```rust
+use axum::middleware::map_request_with_state;
+
+async fn add_request_id<B>(
+    State(state): State<AppState>,
+    mut request: Request<B>,
+) -> Request<B> {
+    request.headers_mut().insert("x-request-id", /* ... */);
+    request
+}
+
+let state = AppState { /* ... */ };
+let app = Router::new()
+    .route("/", get(handler))
+    .route_layer(map_request_with_state(state.clone(), add_request_id))
+    .with_state(state);
+```
+
 ### 4. Custom tower::Service
 
 For maximum control and publishable middleware:
@@ -120,8 +150,7 @@ For maximum control and publishable middleware:
 ```rust
 use tower::{Layer, Service};
 use std::task::{Context, Poll};
-use std::pin::Pin;
-use std::future::Future;
+use futures_util::future::BoxFuture;
 
 #[derive(Clone)]
 struct MyLayer;
@@ -136,21 +165,20 @@ impl<S> Layer<S> for MyLayer {
 #[derive(Clone)]
 struct MyMiddleware<S> { inner: S }
 
-impl<S, B> Service<Request<B>> for MyMiddleware<S>
+impl<S> Service<Request> for MyMiddleware<S>
 where
-    S: Service<Request<B>, Response = Response> + Send + 'static,
+    S: Service<Request, Response = Response> + Send + 'static,
     S::Future: Send + 'static,
-    B: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, request: Request<B>) -> Self::Future {
+    fn call(&mut self, request: Request) -> Self::Future {
         let future = self.inner.call(request);
         Box::pin(async move {
             let response = future.await?;
@@ -158,6 +186,28 @@ where
         })
     }
 }
+```
+
+**With state** in a custom Layer:
+
+```rust
+#[derive(Clone)]
+struct MyLayer { state: AppState }
+
+impl<S> Layer<S> for MyLayer {
+    type Service = MyService<S>;
+    fn layer(&self, inner: S) -> Self::Service {
+        MyService { inner, state: self.state.clone() }
+    }
+}
+
+#[derive(Clone)]
+struct MyService<S> { inner: S, state: AppState }
+
+let app = Router::new()
+    .route("/", get(handler))
+    .layer(MyLayer { state: state.clone() })
+    .with_state(state);
 ```
 
 ## Passing Data from Middleware to Handlers
@@ -200,15 +250,53 @@ async fn handle_error(method: Method, uri: Uri, err: BoxError) -> (StatusCode, S
 
 ## Common tower-http Middleware
 
-| Layer | Purpose |
-|-------|---------|
-| `TraceLayer` | Tracing/logging |
-| `CorsLayer` | CORS headers |
-| `CompressionLayer` | Response compression |
-| `RequestIdLayer` | Request ID generation |
-| `PropagateRequestIdLayer` | Request ID forwarding |
-| `TimeoutLayer` | Request timeouts |
-| `RequestBodyLimitLayer` | Body size enforcement |
+| Layer | Purpose | Feature |
+|-------|---------|---------|
+| `TraceLayer` | Tracing/logging | `trace` |
+| `CorsLayer` | CORS headers | `cors` |
+| `CompressionLayer` | Response compression | `compression-gzip` / `compression-br` |
+| `RequestIdLayer` | Request ID generation | `request-id` |
+| `PropagateRequestIdLayer` | Request ID forwarding | `request-id` |
+| `TimeoutLayer` | Request timeouts | `timeout` |
+| `RequestBodyLimitLayer` | Body size enforcement | `limit` |
+| `SetSensitiveHeadersLayer` | Redact sensitive headers in logs | `sensitive-headers` |
+| `ValidateRequestHeaderLayer` | Header validation / bearer auth | `validate-request` |
+
+### CorsLayer Configuration
+
+```rust
+use tower_http::cors::{CorsLayer, Any};
+use axum::http::{Method, HeaderValue};
+
+// Permissive (development)
+let cors = CorsLayer::permissive();
+
+// Restrictive (production)
+let cors = CorsLayer::new()
+    .allow_origin("https://example.com".parse::<HeaderValue>().unwrap())
+    .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+    .allow_headers(Any)
+    .max_age(Duration::from_secs(3600));
+
+let app = Router::new()
+    .route("/api/data", get(handler))
+    .layer(cors);
+```
+
+### TraceLayer Setup
+
+```rust
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+tracing_subscriber::registry()
+    .with(tracing_subscriber::fmt::layer())
+    .init();
+
+let app = Router::new()
+    .route("/", get(handler))
+    .layer(TraceLayer::new_for_http());
+```
 
 ## Key Notes
 
@@ -216,3 +304,4 @@ async fn handle_error(method: Method, uri: Uri, err: BoxError) -> (StatusCode, S
 - Middleware execution: bottom-to-top with chained `.layer()`, top-to-bottom with `ServiceBuilder`
 - Axum assumes services don't implement backpressure (always ready)
 - Request extensions are NOT auto-copied to response extensions
+- Use `#[debug_middleware]` (requires `macros` feature) for better compile-time error messages

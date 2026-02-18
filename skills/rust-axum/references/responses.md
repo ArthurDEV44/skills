@@ -1,6 +1,6 @@
 # Axum Responses Reference
 
-Source: https://docs.rs/axum/0.8.8/axum/response/index.html
+Source: https://docs.rs/axum/0.8/axum/response/index.html
 
 ## IntoResponse Trait
 
@@ -20,6 +20,8 @@ Anything implementing `IntoResponse` can be returned from a handler.
 | `HeaderMap` | — | Headers only |
 | `Redirect` | — | 3xx redirect |
 | `Sse<S>` | `text/event-stream` | Server-Sent Events |
+| `NoContent` | — | 204 No Content |
+| `Response<Body>` | — | Full control |
 
 ### Tuple Responses
 
@@ -47,7 +49,7 @@ async fn handler() -> (HeaderMap, String) {
     (headers, "hello".to_string())
 }
 
-// Extension + body
+// Extension + body (sets response extensions)
 async fn handler() -> (Extension<MyData>, String) {
     (Extension(MyData { /* ... */ }), "hello".to_string())
 }
@@ -101,20 +103,40 @@ async fn handler() -> Html<&'static str> {
 }
 ```
 
+### NoContent
+
+```rust
+use axum::response::NoContent;
+
+async fn delete_item(Path(id): Path<u64>) -> NoContent {
+    // delete from database...
+    NoContent
+}
+```
+
 ### Server-Sent Events (SSE)
 
 ```rust
 use axum::response::sse::{Event, Sse, KeepAlive};
-use futures_util::stream;
+use tokio_stream::StreamExt as _;
+use futures_util::stream::{self, Stream};
 use std::convert::Infallible;
+use std::time::Duration;
 
 async fn sse_handler() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let stream = stream::repeat_with(|| {
-        Ok(Event::default().data("hello"))
-    });
+    let stream = stream::repeat_with(|| Event::default().data("hello"))
+        .map(Ok)
+        .throttle(Duration::from_secs(1));
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 ```
+
+Event builder methods:
+- `.data("payload")` — event data
+- `.event("event-name")` — event type
+- `.id("unique-id")` — event ID for reconnection
+- `.retry(Duration)` — client reconnection interval
+- `.comment("text")` — SSE comment
 
 ### Low-Level Response Builder
 
@@ -168,3 +190,19 @@ async fn handler() -> (AppendHeaders<[(HeaderName, &'static str); 1]>, String) {
     (AppendHeaders([(header::CONTENT_TYPE, "text/plain")]), "hello".to_string())
 }
 ```
+
+## Rejection Types
+
+All built-in extractors have typed rejection types that implement `IntoResponse`:
+
+| Rejection | Status | Source |
+|-----------|--------|--------|
+| `JsonRejection` | 400/415/422 | `Json` extractor |
+| `PathRejection` | 400 | `Path` extractor |
+| `QueryRejection` | 400 | `Query` extractor |
+| `FormRejection` | 400/415 | `Form` extractor |
+| `ExtensionRejection` | 500 | `Extension` extractor |
+| `MultipartRejection` | 400 | `Multipart` extractor |
+| `WebSocketUpgradeRejection` | 400 | `WebSocketUpgrade` |
+
+Customize rejection responses by implementing `From<OriginalRejection>` for your error type.

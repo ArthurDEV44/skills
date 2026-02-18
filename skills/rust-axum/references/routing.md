@@ -1,6 +1,6 @@
 # Axum Routing Reference
 
-Source: https://docs.rs/axum/0.8.8/axum/routing/index.html
+Source: https://docs.rs/axum/0.8/axum/routing/index.html
 
 ## Router
 
@@ -17,10 +17,18 @@ let app = Router::new()
     .route("/assets/{*path}", get(serve_asset));
 ```
 
-Path syntax:
+Path syntax (Axum 0.8 — curly braces, NOT colons):
 - Static: `/foo/bar`
 - Capture: `/{key}` — extracts a single segment
 - Wildcard: `/{*key}` — captures remaining path
+
+Multiple methods on one route:
+
+```rust
+let app = Router::new()
+    .route("/users", get(list_users).post(create_user))
+    .route("/users/{id}", get(show_user).put(update_user).delete(delete_user));
+```
 
 ### route_service
 
@@ -46,6 +54,19 @@ let user_routes = Router::new().route("/{id}", get(|| async {}));
 let api_routes = Router::new().nest("/users", user_routes);
 let app = Router::new().nest("/api", api_routes);
 // Accepts: GET /api/users/{id}
+```
+
+Captures from outer routes are accessible in inner routes:
+
+```rust
+async fn users_get(Path(params): Path<HashMap<String, String>>) {
+    // Both `version` and `id` captured even though inner route only defines `id`
+    let version = params.get("version");
+    let id = params.get("id");
+}
+
+let users_api = Router::new().route("/users/{id}", get(users_get));
+let app = Router::new().nest("/{version}/api", users_api);
 ```
 
 ### nest_service
@@ -143,6 +164,8 @@ let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
 axum::serve(listener, app).await?;
 ```
 
+Note: `axum::serve` accepts `Router` directly (it calls `into_make_service` internally).
+
 **`into_make_service_with_connect_info::<SocketAddr>()`** — enables `ConnectInfo` extraction:
 
 ```rust
@@ -164,6 +187,25 @@ axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).a
 ## MethodRouter
 
 Routes based on HTTP method. Functions: `get`, `post`, `put`, `delete`, `patch`, `head`, `options`, `trace`, `connect`, `any`, `on`.
+
+**`any`** — matches all methods (useful for WebSocket endpoints):
+
+```rust
+use axum::routing::any;
+let app = Router::new().route("/ws", any(ws_handler));
+```
+
+**`on`** — match specific method filter:
+
+```rust
+use axum::routing::on;
+use axum::http::Method;
+
+let app = Router::new().route(
+    "/custom",
+    on(MethodFilter::GET | MethodFilter::POST, handler),
+);
+```
 
 Variants: `get_service`, `post_service`, etc. for routing to `Service` implementations.
 

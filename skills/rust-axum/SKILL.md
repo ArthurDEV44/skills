@@ -1,13 +1,13 @@
 ---
 name: rust-axum
-description: "Axum 0.8 web framework for Rust: routing, extractors, handlers, middleware, responses, state management, WebSockets, SSE, error handling, and Tower integration. Use when writing, reviewing, or refactoring Rust code using Axum: (1) Setting up an Axum web server with Router and routes, (2) Defining handler functions with extractors (Path, Query, Json, Form, State, Multipart), (3) Building HTTP responses (Json, Html, Redirect, SSE, custom IntoResponse), (4) Writing middleware with from_fn, from_extractor, or custom Tower layers, (5) Managing application state with State and substates (FromRef), (6) Handling WebSocket connections, (7) Configuring error handling and fallbacks, (8) Nesting and merging routers, (9) Serving with graceful shutdown, (10) Implementing custom extractors (FromRequest, FromRequestParts), (11) Using tower-http middleware (CORS, tracing, compression, timeouts)."
+description: "Axum 0.8 web framework for Rust: routing, extractors, handlers, middleware, responses, state, WebSockets, SSE, error handling, testing, Tower. Use when writing or reviewing Axum code: (1) Router and routes, (2) Extractors (Path, Query, Json, Form, State, Host, Multipart), (3) Responses (Json, Html, Redirect, SSE, NoContent, IntoResponse), (4) Middleware (from_fn, Tower layers, CORS, tracing), (5) State with FromRef substates and Arc, (6) WebSocket, (7) Error handling with anyhow/thiserror, (8) Nesting/merging routers, (9) Graceful shutdown, (10) Custom extractors (FromRequest, FromRequestParts), (11) Testing handlers, (12) debug_handler macro."
 ---
 
 # Rust Axum 0.8
 
 Axum is a web framework focused on ergonomics and modularity, built on Tokio, Hyper, and Tower.
 
-Official docs: https://docs.rs/axum/0.8.8/axum/
+Official docs: https://docs.rs/axum/0.8/axum/
 
 ## Quick Start
 
@@ -40,20 +40,23 @@ tracing-subscriber = "0.3"
 
 Core: `http1`, `json`, `form`, `query`, `matched-path`, `original-uri`, `tokio`, `tracing`
 
-Optional: `http2`, `macros` (debug_handler/debug_middleware), `multipart`, `ws`
+Optional: `http2`, `macros` (`#[debug_handler]`, `#[debug_middleware]`), `multipart`, `ws`
 
 ## Handlers
 
-Async functions accepting extractors (max 16) and returning `impl IntoResponse`. Body-consuming extractors must be last. Use `#[debug_handler]` macro for better error messages.
+Async functions accepting extractors (max 16) and returning `impl IntoResponse`. Body-consuming extractors must be last.
+
+Use `#[debug_handler]` (requires `macros` feature) for better compile-time error messages:
 
 ```rust
-use axum::{extract::{Path, Query, Json, State}, http::StatusCode};
+use axum::{extract::{Path, Query, Json, State}, http::StatusCode, debug_handler};
 
+#[debug_handler]
 async fn create_user(
     State(db): State<DbPool>,
     Json(payload): Json<CreateUser>,
-) -> Result<Json<User>, StatusCode> {
-    let user = db.create(payload).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+) -> Result<Json<User>, AppError> {
+    let user = db.create(payload).await?;
     Ok(Json(user))
 }
 ```
@@ -61,19 +64,21 @@ async fn create_user(
 ## Routing
 
 ```rust
-use axum::{routing::{get, post, put, delete}, Router};
+use axum::{routing::{get, post, put, delete, any}, Router};
 
 let app = Router::new()
     .route("/", get(root))
     .route("/users", get(list_users).post(create_user))
     .route("/users/{id}", get(show_user).put(update_user).delete(delete_user))
+    .route("/ws", any(ws_handler))
     .nest("/api", api_routes())
     .merge(health_routes())
     .fallback(not_found_handler)
+    .method_not_allowed_fallback(method_not_allowed)
     .with_state(app_state);
 ```
 
-For complete routing API (nest, merge, fallback, route_layer, method_not_allowed_fallback): see [references/routing.md](references/routing.md).
+Path syntax: `/{key}` (single segment), `/{*key}` (wildcard/rest). For complete routing API: see [references/routing.md](references/routing.md).
 
 ## Extractors
 
@@ -84,6 +89,7 @@ For complete routing API (nest, merge, fallback, route_layer, method_not_allowed
 | `Json<T>` | JSON body | `json` | Yes |
 | `Form<T>` | Form body | `form` | Yes |
 | `State<S>` | App state | - | No |
+| `Host` | Host header/URI | - | No |
 | `Multipart` | File uploads | `multipart` | Yes |
 | `HeaderMap` | Headers | - | No |
 | `Extension<T>` | Extensions | - | No |
@@ -110,9 +116,34 @@ impl IntoResponse for AppError {
 }
 ```
 
-Built-in: `()`, `String`, `Json<T>`, `Html<T>`, `Form<T>`, `Redirect`, `Sse<S>`, `StatusCode`, tuples.
+Built-in: `()`, `String`, `Json<T>`, `Html<T>`, `Form<T>`, `Redirect`, `Sse<S>`, `NoContent`, `StatusCode`, tuples.
 
-For SSE, Redirect variants, custom IntoResponse, error handling patterns: see [references/responses.md](references/responses.md).
+For SSE, Redirect variants, custom IntoResponse, AppendHeaders: see [references/responses.md](references/responses.md).
+
+## Error Handling
+
+The standard anyhow wrapper pattern for handlers:
+
+```rust
+struct AppError(anyhow::Error);
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Error: {}", self.0)).into_response()
+    }
+}
+
+impl<E: Into<anyhow::Error>> From<E> for AppError {
+    fn from(err: E) -> Self { Self(err.into()) }
+}
+
+async fn handler(State(db): State<DbPool>) -> Result<Json<User>, AppError> {
+    let user = db.get_user(1).await?; // ? auto-converts any error
+    Ok(Json(user))
+}
+```
+
+For comprehensive error handling patterns (thiserror, rejections, error JSON responses): see [references/error-handling.md](references/error-handling.md).
 
 ## Middleware
 
@@ -130,12 +161,12 @@ async fn auth_middleware(
 
 let app = Router::new()
     .route("/protected", get(handler))
-    .layer(middleware::from_fn(auth_middleware));
+    .route_layer(middleware::from_fn(auth_middleware));
 ```
 
 Use `from_fn_with_state()` for state access. Layer execution order: bottom-to-top with `.layer()`, top-to-bottom with `ServiceBuilder`.
 
-For from_extractor, custom Tower Service, HandleErrorLayer, tower-http layers: see [references/middleware.md](references/middleware.md).
+For from_extractor, custom Tower Service, HandleErrorLayer, tower-http layers, CorsLayer config: see [references/middleware.md](references/middleware.md).
 
 ## State Management
 
@@ -160,7 +191,7 @@ struct AppState {
 }
 ```
 
-Use `tokio::sync::Mutex` when holding lock across `.await`.
+Use `Arc<AppState>` when state is not cheaply cloneable. Use `tokio::sync::Mutex` when holding lock across `.await`.
 
 ## Graceful Shutdown
 
@@ -217,9 +248,31 @@ let app = Router::new()
     .fallback_service(ServeFile::new("static/index.html"));
 ```
 
+### Testing
+
+```rust
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use tower::ServiceExt;
+
+#[tokio::test]
+async fn test_handler() {
+    let app = create_app();
+    let response = app
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+```
+
+For comprehensive testing patterns: see [references/testing.md](references/testing.md).
+
 ## References
 
 - **Routing** (Router, nest, merge, fallback, route_layer): [references/routing.md](references/routing.md)
-- **Extractors** (Path, Query, Json, State, custom extractors): [references/extractors.md](references/extractors.md)
-- **Middleware** (from_fn, Tower layers, error handling): [references/middleware.md](references/middleware.md)
-- **Responses** (IntoResponse, SSE, Redirect, error types): [references/responses.md](references/responses.md)
+- **Extractors** (Path, Query, Json, State, Host, custom extractors): [references/extractors.md](references/extractors.md)
+- **Middleware** (from_fn, Tower layers, CorsLayer, error handling): [references/middleware.md](references/middleware.md)
+- **Responses** (IntoResponse, SSE, Redirect, NoContent, error types): [references/responses.md](references/responses.md)
+- **Error Handling** (anyhow, thiserror, rejections, JSON errors): [references/error-handling.md](references/error-handling.md)
+- **Testing** (oneshot, TestClient, integration tests): [references/testing.md](references/testing.md)
