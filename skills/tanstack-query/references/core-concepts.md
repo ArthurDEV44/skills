@@ -4,11 +4,13 @@
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Important Defaults](#important-defaults)
+- [DevTools](#devtools)
 - [Queries](#queries)
 - [Query Keys](#query-keys)
 - [Query Functions](#query-functions)
 - [Query Options](#query-options)
 - [Mutations](#mutations)
+- [Mutation Options](#mutation-options)
 - [Query Invalidation](#query-invalidation)
 - [Invalidations from Mutations](#invalidations-from-mutations)
 - [Updates from Mutation Responses](#updates-from-mutation-responses)
@@ -22,6 +24,11 @@ npm i @tanstack/react-query
 ```
 
 Compatible with React v18+, ReactDOM and React Native.
+
+DevTools (optional but recommended):
+```bash
+npm i @tanstack/react-query-devtools
+```
 
 Recommended ESLint plugin:
 ```bash
@@ -85,13 +92,37 @@ function Todos() {
 ## Important Defaults
 
 - Query instances via `useQuery`/`useInfiniteQuery` consider cached data as **stale** by default (`staleTime: 0`).
-- Set `staleTime` to control freshness (e.g., `2 * 60 * 1000` for 2 min, `Infinity` for manual-only invalidation, `'static'` to never refetch even on invalidation).
+- Set `staleTime` to control freshness:
+  - `2 * 60 * 1000` for 2 min
+  - `Infinity` for manual-only invalidation
+  - `'static'` to never refetch even on invalidation (truly static data)
+- `staleTime` can be a function: `(query) => number | 'static'`
 - Stale queries refetch automatically on: new instance mount, window refocus, network reconnect.
 - Customize with `refetchOnMount`, `refetchOnWindowFocus`, `refetchOnReconnect`.
 - `refetchInterval` triggers periodic refetches independent of `staleTime`.
-- Inactive queries are garbage collected after 5 min (`gcTime: 5 * 60 * 1000`).
-- Failed queries retry **3 times with exponential backoff** by default.
+- Inactive queries are garbage collected after 5 min (`gcTime: 5 * 60 * 1000`). During SSR, `gcTime` defaults to `Infinity`.
+- Failed queries retry **3 times with exponential backoff** by default. On server: `0` retries.
 - Results use **structural sharing** to preserve referential identity when data hasn't changed.
+
+## DevTools
+
+```tsx
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      {/* Your app */}
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  )
+}
+```
+
+DevTools are tree-shaken in production builds. Options:
+- `initialIsOpen`: Start open/closed
+- `buttonPosition`: `'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'`
+- `position`: `'top' | 'bottom' | 'left' | 'right'`
 
 ## Queries
 
@@ -182,6 +213,15 @@ queryFn: async () => {
 
 **QueryFunctionContext**: `{ queryKey, client, signal?, meta? }` plus `pageParam` and `direction` for infinite queries.
 
+Use `signal` for automatic query cancellation:
+```tsx
+queryFn: async ({ signal }) => {
+  const response = await fetch('/todos', { signal })
+  if (!response.ok) throw new Error('Failed to fetch')
+  return response.json()
+}
+```
+
 ## Query Options
 
 Use `queryOptions` helper to share queryKey/queryFn between `useQuery`, `prefetchQuery`, etc. with full type inference:
@@ -203,22 +243,30 @@ queryClient.prefetchQuery(groupOptions(23))
 queryClient.setQueryData(groupOptions(42).queryKey, newGroups)
 ```
 
-Use `mutationOptions` similarly for mutations:
-```ts
-function groupMutationOptions() {
-  return mutationOptions({
-    mutationKey: ['addGroup'],
-    mutationFn: addGroup,
-  })
-}
-```
-
 Override per-component:
 ```ts
 const query = useQuery({
   ...groupOptions(1),
   select: (data) => data.groupName,
 })
+```
+
+Use `infiniteQueryOptions` for infinite queries:
+```ts
+import { infiniteQueryOptions } from '@tanstack/react-query'
+
+function projectsInfiniteOptions() {
+  return infiniteQueryOptions({
+    queryKey: ['projects'],
+    queryFn: ({ pageParam }) => fetchProjects(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
+}
+
+useInfiniteQuery(projectsInfiniteOptions())
+useSuspenseInfiniteQuery(projectsInfiniteOptions())
+queryClient.prefetchInfiniteQuery(projectsInfiniteOptions())
 ```
 
 ## Mutations
@@ -239,13 +287,29 @@ const mutation = useMutation({
 ```tsx
 useMutation({
   mutationFn: addTodo,
-  onMutate: (variables, context) => {
-    // Before mutation fires. Return rollback data.
+  onMutate: (variables) => {
+    // Before mutation fires. Optionally return context for rollback.
     return { id: 1 }
   },
-  onError: (error, variables, onMutateResult, context) => { /* rollback */ },
-  onSuccess: (data, variables, onMutateResult, context) => { /* update cache */ },
-  onSettled: (data, error, variables, onMutateResult, context) => { /* always */ },
+  onError: (error, variables, context) => {
+    // context is the return value of onMutate
+    console.log(`rolling back optimistic update with id ${context.id}`)
+  },
+  onSuccess: (data, variables, context) => {
+    // Update cache, invalidate queries, etc.
+  },
+  onSettled: (data, error, variables, context) => {
+    // Always runs (success or error)
+  },
+})
+```
+
+**Per-mutate callbacks** (run after useMutation callbacks):
+```tsx
+mutation.mutate(todo, {
+  onSuccess: (data) => { /* runs after useMutation onSuccess */ },
+  onError: (error) => { /* runs after useMutation onError */ },
+  onSettled: (data, error) => { /* runs after useMutation onSettled */ },
 })
 ```
 
@@ -263,6 +327,23 @@ try {
 useMutation({ mutationFn: addTodo, scope: { id: 'todo' } })
 ```
 
+## Mutation Options
+
+Use `mutationOptions` helper for type-safe shared mutation options:
+```ts
+import { mutationOptions } from '@tanstack/react-query'
+
+function addTodoMutationOptions() {
+  return mutationOptions({
+    mutationKey: ['addTodo'],
+    mutationFn: addTodo,
+    onSuccess: () => { /* ... */ },
+  })
+}
+
+useMutation(addTodoMutationOptions())
+```
+
 ## Query Invalidation
 
 Mark queries as stale and potentially refetch:
@@ -276,7 +357,7 @@ queryClient.invalidateQueries({
 })
 ```
 
-When invalidated: marked stale (overrides staleTime) + refetched if currently rendered.
+When invalidated: marked stale (overrides staleTime, except `'static'`) + refetched if currently rendered.
 
 ## Invalidations from Mutations
 
@@ -301,6 +382,8 @@ const mutation = useMutation({
 Use `setQueryData` to update cache directly with mutation response:
 
 ```tsx
+const queryClient = useQueryClient()
+
 const mutation = useMutation({
   mutationFn: editTodo,
   onSuccess: (data) => {
@@ -331,4 +414,4 @@ queryClient.refetchQueries({ queryKey: ['posts'], type: 'active' })
 Properties: `queryKey?`, `exact?`, `type?: 'active' | 'inactive' | 'all'`, `stale?`, `fetchStatus?`, `predicate?`
 
 ### Mutation Filters
-Properties: `mutationKey?`, `exact?`, `status?`, `predicate?`
+Properties: `mutationKey?`, `exact?`, `status?: 'idle' | 'pending' | 'success' | 'error'`, `predicate?`

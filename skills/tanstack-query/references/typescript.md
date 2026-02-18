@@ -6,6 +6,8 @@
 - [Typing Errors](#typing-errors)
 - [Registering Global Types](#registering-global-types)
 - [Typing Query Options](#typing-query-options)
+- [Typing Infinite Query Options](#typing-infinite-query-options)
+- [Typing Mutation Options](#typing-mutation-options)
 - [skipToken for Typesafe Disabling](#skiptoken-for-typesafe-disabling)
 - [GraphQL Integration](#graphql-integration)
 
@@ -54,6 +56,15 @@ if (isSuccess) {
 }
 ```
 
+With `useSuspenseQuery`, `data` is always defined:
+```tsx
+const { data } = useSuspenseQuery({
+  queryKey: ['test'],
+  queryFn: () => Promise.resolve(5),
+})
+// data: number (never undefined)
+```
+
 ## Typing Errors
 
 Default error type is `Error`. For custom error types:
@@ -77,7 +88,7 @@ import '@tanstack/react-query'
 
 declare module '@tanstack/react-query' {
   interface Register {
-    defaultError: unknown // or AxiosError, etc.
+    defaultError: AxiosError // or Error, or custom type
   }
 }
 ```
@@ -122,26 +133,75 @@ import { queryOptions } from '@tanstack/react-query'
 
 function groupOptions(id: number) {
   return queryOptions({
-    queryKey: ['groups', id],
+    queryKey: ['groups', id] as const,
     queryFn: () => fetchGroups(id),
     staleTime: 5 * 1000,
   })
 }
 
+// Full type inference everywhere:
 useQuery(groupOptions(1))
+useSuspenseQuery(groupOptions(5))
 queryClient.prefetchQuery(groupOptions(23))
-const data = queryClient.getQueryData(groupOptions().queryKey)
+
+// Type-safe cache access:
+const data = queryClient.getQueryData(groupOptions(42).queryKey)
 //     ^? const data: Group[] | undefined
+
+// Type-safe cache update:
+queryClient.setQueryData(groupOptions(42).queryKey, newGroups)
 ```
 
-Use `mutationOptions` similarly:
+Override per-component:
 ```ts
-function groupMutationOptions() {
-  return mutationOptions({
-    mutationKey: ['addGroup'],
-    mutationFn: addGroup,
+const query = useQuery({
+  ...groupOptions(1),
+  select: (data) => data.groupName,
+})
+```
+
+## Typing Infinite Query Options
+
+Use `infiniteQueryOptions` for type-safe infinite queries:
+```ts
+import { infiniteQueryOptions } from '@tanstack/react-query'
+
+function projectsInfiniteOptions(filters?: Filters) {
+  return infiniteQueryOptions({
+    queryKey: ['projects', filters] as const,
+    queryFn: ({ pageParam }) => fetchProjects({ ...filters, cursor: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
   })
 }
+
+// Full inference:
+useInfiniteQuery(projectsInfiniteOptions())
+useSuspenseInfiniteQuery(projectsInfiniteOptions({ status: 'active' }))
+queryClient.prefetchInfiniteQuery(projectsInfiniteOptions())
+
+// Type-safe cache access:
+const data = queryClient.getQueryData(projectsInfiniteOptions().queryKey)
+//     ^? InfiniteData<ProjectPage, number> | undefined
+```
+
+## Typing Mutation Options
+
+Use `mutationOptions` for type-safe shared mutation options:
+```ts
+import { mutationOptions } from '@tanstack/react-query'
+
+function addTodoMutationOptions() {
+  return mutationOptions({
+    mutationKey: ['addTodo'] as const,
+    mutationFn: (newTodo: NewTodo) => api.addTodo(newTodo),
+    onSuccess: (data) => {
+      // data is fully typed
+    },
+  })
+}
+
+useMutation(addTodoMutationOptions())
 ```
 
 ## skipToken for Typesafe Disabling
@@ -154,10 +214,16 @@ function Todos() {
 
   const { data } = useQuery({
     queryKey: ['todos', filter],
+    // Type-safe: when filter is undefined, skip the query
     queryFn: filter ? () => fetchTodos(filter) : skipToken,
   })
 }
 ```
+
+**Why skipToken over `enabled: false`?**
+- `enabled: false` doesn't narrow the queryFn parameter types
+- With `skipToken`, TypeScript knows that when queryFn runs, `filter` is defined
+- `skipToken` prevents calling `refetch()` (which would fail anyway without the param)
 
 Note: `refetch()` does not work with `skipToken`. Use `enabled: false` if you need manual refetch.
 
@@ -189,4 +255,21 @@ function App() {
       ),
   })
 }
+```
+
+### Type-safe query key factories
+
+```ts
+const todoKeys = {
+  all: ['todos'] as const,
+  lists: () => [...todoKeys.all, 'list'] as const,
+  list: (filters: TodoFilters) => [...todoKeys.lists(), filters] as const,
+  details: () => [...todoKeys.all, 'detail'] as const,
+  detail: (id: number) => [...todoKeys.details(), id] as const,
+}
+
+// Usage:
+useQuery({ queryKey: todoKeys.list({ status: 'done' }), queryFn: ... })
+queryClient.invalidateQueries({ queryKey: todoKeys.lists() }) // invalidates all lists
+queryClient.invalidateQueries({ queryKey: todoKeys.all })     // invalidates everything
 ```

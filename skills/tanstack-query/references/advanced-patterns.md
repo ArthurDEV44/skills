@@ -6,6 +6,7 @@
 - [Paginated Queries](#paginated-queries)
 - [Infinite Queries](#infinite-queries)
 - [Optimistic Updates](#optimistic-updates)
+- [useMutationState](#usemutationstate)
 - [Query Cancellation](#query-cancellation)
 - [Disabling Queries](#disabling-queries)
 - [Query Retries](#query-retries)
@@ -37,6 +38,20 @@ const userQueries = useQueries({
 ```
 
 With suspense, use `useSuspenseQueries` instead (individual `useSuspenseQuery` calls run serially).
+
+`useQueries` also supports a `combine` option to merge results:
+```tsx
+const { data, pending } = useQueries({
+  queries: ids.map((id) => ({
+    queryKey: ['item', id],
+    queryFn: () => fetchItem(id),
+  })),
+  combine: (results) => ({
+    data: results.map((r) => r.data),
+    pending: results.some((r) => r.isPending),
+  }),
+})
+```
 
 ## Dependent Queries
 
@@ -155,6 +170,21 @@ getNextPageParam: (lastPage, allPages, lastPageParam) => {
 },
 ```
 
+**Type-safe with infiniteQueryOptions**:
+```tsx
+import { infiniteQueryOptions } from '@tanstack/react-query'
+
+const projectsOptions = infiniteQueryOptions({
+  queryKey: ['projects'],
+  queryFn: ({ pageParam }) => fetchProjects(pageParam),
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+
+useInfiniteQuery(projectsOptions)
+queryClient.prefetchInfiniteQuery(projectsOptions)
+```
+
 ## Optimistic Updates
 
 ### Via the UI (simpler, recommended for single location)
@@ -186,20 +216,75 @@ const variables = useMutationState<string>({
 ### Via the cache (automatic multi-location updates)
 
 ```tsx
+const queryClient = useQueryClient()
+
 useMutation({
   mutationFn: updateTodo,
-  onMutate: async (newTodo, context) => {
-    await context.client.cancelQueries({ queryKey: ['todos'] })
-    const previousTodos = context.client.getQueryData(['todos'])
-    context.client.setQueryData(['todos'], (old) => [...old, newTodo])
+  onMutate: async (newTodo) => {
+    // Cancel outgoing refetches
+    await queryClient.cancelQueries({ queryKey: ['todos'] })
+    // Snapshot previous value
+    const previousTodos = queryClient.getQueryData(['todos'])
+    // Optimistically update cache
+    queryClient.setQueryData(['todos'], (old) => [...old, newTodo])
+    // Return context with rollback data
     return { previousTodos }
   },
-  onError: (err, newTodo, onMutateResult, context) => {
-    context.client.setQueryData(['todos'], onMutateResult.previousTodos)
+  onError: (err, newTodo, context) => {
+    // Rollback on error
+    queryClient.setQueryData(['todos'], context.previousTodos)
   },
-  onSettled: (data, error, variables, onMutateResult, context) =>
-    context.client.invalidateQueries({ queryKey: ['todos'] }),
+  onSettled: () => {
+    // Always refetch after error or success
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  },
 })
+```
+
+### Optimistic update for a single entity
+
+```tsx
+useMutation({
+  mutationFn: (updatedTodo) => axios.put(`/todos/${updatedTodo.id}`, updatedTodo),
+  onMutate: async (updatedTodo) => {
+    await queryClient.cancelQueries({ queryKey: ['todos', updatedTodo.id] })
+    const previousTodo = queryClient.getQueryData(['todos', updatedTodo.id])
+    queryClient.setQueryData(['todos', updatedTodo.id], updatedTodo)
+    return { previousTodo }
+  },
+  onError: (err, updatedTodo, context) => {
+    queryClient.setQueryData(['todos', updatedTodo.id], context.previousTodo)
+  },
+  onSettled: (data, error, variables) => {
+    queryClient.invalidateQueries({ queryKey: ['todos', variables.id] })
+  },
+})
+```
+
+## useMutationState
+
+Track mutation state across components. Useful for showing global loading states or pending mutations.
+
+```tsx
+import { useMutationState } from '@tanstack/react-query'
+
+// Get all pending mutation variables for a specific key
+const pendingTodos = useMutationState({
+  filters: { mutationKey: ['addTodo'], status: 'pending' },
+  select: (mutation) => mutation.state.variables,
+})
+
+// Get count of pending mutations
+const pendingCount = useMutationState({
+  filters: { status: 'pending' },
+  select: (mutation) => mutation.state.status,
+}).length
+
+// Get last mutation result
+const lastResult = useMutationState({
+  filters: { mutationKey: ['addTodo'], status: 'success' },
+  select: (mutation) => mutation.state.data,
+}).at(-1)
 ```
 
 ## Query Cancellation
@@ -226,8 +311,6 @@ Manual cancellation:
 queryClient.cancelQueries({ queryKey: ['todos'] })
 ```
 
-Cancel options: `{ silent?: boolean, revert?: boolean }`
-
 **Limitation**: Cancellation does not work with Suspense hooks.
 
 ## Disabling Queries
@@ -246,6 +329,15 @@ import { skipToken } from '@tanstack/react-query'
 useQuery({
   queryKey: ['todos', filter],
   queryFn: filter ? () => fetchTodos(filter) : skipToken,
+})
+```
+
+**`enabled` can be a function** receiving the query:
+```tsx
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  enabled: (query) => query.state.data !== undefined, // only refetch, never initial fetch
 })
 ```
 
@@ -390,26 +482,40 @@ import { useIsFetching } from '@tanstack/react-query'
 const isFetching = useIsFetching()
 ```
 
+For mutations:
+```tsx
+import { useIsMutating } from '@tanstack/react-query'
+const isMutating = useIsMutating()
+```
+
 ## Prefetching
 
+### Basic prefetch
 ```tsx
-// Basic prefetch
 await queryClient.prefetchQuery({
   queryKey: ['todos'],
   queryFn: fetchTodos,
 })
+```
 
-// Prefetch infinite query with multiple pages
+### With queryOptions (recommended)
+```tsx
+queryClient.prefetchQuery(todosOptions(filters))
+queryClient.prefetchInfiniteQuery(projectsInfiniteOptions())
+```
+
+### Prefetch infinite query with multiple pages
+```tsx
 await queryClient.prefetchInfiniteQuery({
   queryKey: ['projects'],
   queryFn: fetchProjects,
   initialPageParam: 0,
   getNextPageParam: (lastPage, pages) => lastPage.nextCursor,
-  pages: 3,
+  pages: 3, // prefetch first 3 pages
 })
 ```
 
-**In event handlers**:
+### In event handlers
 ```tsx
 const prefetch = () => {
   queryClient.prefetchQuery({
@@ -421,23 +527,40 @@ const prefetch = () => {
 <button onMouseEnter={prefetch} onFocus={prefetch}>Show Details</button>
 ```
 
-**In components** (flatten waterfalls):
+### In components (flatten waterfalls)
+
+With Suspense, use `usePrefetchQuery` to start fetching without subscribing:
 ```tsx
-// Use useQuery and ignore result for prefetching
+// Parent component starts the fetch
+usePrefetchQuery(todosOptions(filters))
+usePrefetchInfiniteQuery(projectsInfiniteOptions())
+
+// Child component (inside Suspense) consumes the data
+const { data } = useSuspenseQuery(todosOptions(filters))
+```
+
+Without Suspense, use `useQuery` with `notifyOnChangeProps: []` to prefetch silently:
+```tsx
 useQuery({
   queryKey: ['article-comments', id],
   queryFn: getArticleCommentsById,
   notifyOnChangeProps: [],
 })
-
-// Or with Suspense, use usePrefetchQuery
-usePrefetchQuery({
-  queryKey: ['article-comments', id],
-  queryFn: getArticleCommentsById,
-})
 ```
 
-**Manual priming**:
+### Manual priming
 ```tsx
 queryClient.setQueryData(['todos'], todos)
 ```
+
+### Prefetching on router transitions
+```tsx
+// React Router loader
+export const loader = async () => {
+  const queryClient = getQueryClient()
+  await queryClient.ensureQueryData(todosOptions())
+  return null
+}
+```
+
+`ensureQueryData` only fetches if the data doesn't already exist or is stale.
