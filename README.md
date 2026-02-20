@@ -33,6 +33,12 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 |-------|-------------|
 | [go-best-practices](skills/go-best-practices) | Go idioms and modern patterns: error handling, interfaces, concurrency, generics, testing, project structure |
 
+### Python
+
+| Skill | Description |
+|-------|-------------|
+| [python-best-practices](skills/python-best-practices) | Idiomatic Python 3.10+: type hints, dataclasses, error handling, generators, context managers, decorators, enums, pattern matching, pytest, async/await, packaging |
+
 ### Frontend & Web
 
 | Skill | Description |
