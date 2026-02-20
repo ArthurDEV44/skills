@@ -56,6 +56,7 @@ Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurD
 | [tanstack-table](skills/tanstack-table) | TanStack Table v8: headless tables, sorting, filtering, pagination, selection |
 | [tanstack-store](skills/tanstack-store) | TanStack Store: framework-agnostic reactive state with Store, Derived, Effect |
 | [coss-ui](skills/coss-ui) | Component library built on Base UI and Tailwind CSS for React |
+| [react-email-best-practices](skills/react-email-best-practices) | React Email: components, Tailwind styling, rendering, sending via Resend/Nodemailer/SendGrid/SES, Outlook/Gmail compatibility |
 
 ### 3D Graphics & Shaders
 
