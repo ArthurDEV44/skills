@@ -84,15 +84,35 @@ Read-only subagents with isolated context windows. Used by meta-workflows for pa
 
 ## Install
 
-Clone into your Claude Code skills directory:
+### Skills
+
+Install all skills with [Vercel Labs' `skills` CLI](https://github.com/vercel-labs/skills):
 
 ```bash
-git clone git@github.com:ArthurDEV44/skills.git /tmp/skills
-cp -r /tmp/skills/skills/* ~/.claude/skills/
-cp /tmp/skills/agents/*.md ~/.claude/agents/
+bunx skills add ArthurDEV44/skills
 ```
 
-Claude Code picks them up automatically on next session. Skills with `name: <slug>` in their frontmatter are invocable as `/<slug>`; others auto-trigger based on their `description`.
+Or cherry-pick specific skills:
+
+```bash
+bunx skills add ArthurDEV44/skills --skill meta-code --skill write-prd
+```
+
+Other useful commands: `bunx skills list`, `bunx skills update`, `bunx skills remove <name>`.
+
+### Agents
+
+The `skills` CLI only manages `skills/`, not `agents/`. Install the 3 subagents manually:
+
+```bash
+mkdir -p ~/.claude/agents
+for agent in agent-docs agent-explore agent-websearch; do
+  curl -sL "https://raw.githubusercontent.com/ArthurDEV44/skills/main/agents/${agent}.md" \
+    -o ~/.claude/agents/${agent}.md
+done
+```
+
+Claude Code picks everything up automatically on next session. Skills with a `name: <slug>` in their frontmatter are invocable as `/<slug>`; others auto-trigger based on their `description`.
 
 ## License
 
