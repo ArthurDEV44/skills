@@ -1,110 +1,98 @@
 # Skills
 
-Collection of AI coding agent skills by [ArthurDEV44](https://github.com/ArthurDEV44).
+Collection of [Claude Code](https://docs.claude.com/en/docs/claude-code) skills and subagents by [ArthurDEV44](https://github.com/ArthurDEV44).
 
-## Available Skills
+Paired with my Claude Code configuration: [`claude-config`](https://github.com/ArthurDEV44/claude-config) (private).
 
-### Rust Ecosystem
+## Overview
 
-| Skill | Description |
-|-------|-------------|
-| [rust-best-practices](skills/rust-best-practices) | Idiomatic patterns, API design, Cargo tooling, Clippy, performance, documentation |
-| [rust-traits](skills/rust-traits) | Trait system best practices, patterns, and idiomatic usage |
-| [rust-ownership](skills/rust-ownership) | Ownership, borrowing, lifetimes, subtyping, and variance |
-| [rust-async](skills/rust-async) | Async/await patterns, futures, streams, and runtime usage |
-| [rust-arc](skills/rust-arc) | Thread-safe shared ownership with Arc and reference counting |
-| [rust-concurrency](skills/rust-concurrency) | Threads, message passing, shared state, Send/Sync, atomics |
-| [rust-tokio](skills/rust-tokio) | Tokio runtime: task spawning, channels, I/O, select!, shutdown |
-| [rust-axum](skills/rust-axum) | Axum 0.8 web framework: routing, extractors, handlers, middleware, SSE |
-| [rust-seaorm](skills/rust-seaorm) | SeaORM async ORM: entities, CRUD, relations, transactions |
-| [rust-crypto](skills/rust-crypto) | RustCrypto: AES-GCM, ChaCha20, HMAC, SHA-2, HKDF, Argon2, Ed25519, X25519 |
-| [clerk-rs-sdk](skills/clerk-rs-sdk) | clerk-rs Rust SDK: typed API calls, JWT validation, framework middleware |
-| [async-stripe](skills/async-stripe) | async-stripe Rust crate: OpenAPI codegen, typed Stripe API bindings |
+- **`skills/`** — 24 custom skills, invocable via `/skill-name` or auto-triggered by their descriptions
+- **`agents/`** — 3 subagents used by multiple skills for isolated, read-only operations
 
-### C
+Everything here is dereferenced: skills that were symlinked to `~/.agents/` on my machine are committed as real content so the repo is self-contained.
 
-| Skill | Description |
-|-------|-------------|
-| [c-best-practices](skills/c-best-practices) | Modern C (C11/C17/C23): memory safety, pointers, structs, error handling, strings, preprocessor, threads, atomics, sanitizers |
+## Skills
 
-### Go
+### Meta-workflows (multi-agent orchestrators)
 
-| Skill | Description |
-|-------|-------------|
-| [go-best-practices](skills/go-best-practices) | Go idioms and modern patterns: error handling, interfaces, concurrency, generics, testing, project structure |
+| Skill | Purpose |
+|-------|---------|
+| [meta-code](skills/meta-code) | Adaptive multi-agent research pipeline — web + codebase + docs, with synthesis, challenge, verify, refine gates |
+| [meta-debug](skills/meta-debug) | Error diagnosis with surgical precision — reproduce, triage, root-cause, verify |
+| [meta-archi](skills/meta-archi) | Architecture audit for LLM-readiness (CLAUDE.md, AGENTS.md, structure for AI tools) |
+| [meta-audit](skills/meta-audit) | Autonomous codebase audit with PRD report — 10-phase pipeline with AutoSCORE validators |
+| [meta-refact](skills/meta-refact) | Refactoring pipeline — analyze, plan, execute, simplify, validate |
+| [meta-prompt](skills/meta-prompt) | Generate / transform / optimize prompts for Claude Code |
+| [meta-review-prd](skills/meta-review-prd) | Independent PRD review before implementation — fresh context, zero author bias |
+| [meta-speak](skills/meta-speak) | Write in Arthur's personal voice — analyzes context and tone |
+| [meta-storytelling](skills/meta-storytelling) | Copywriting / storytelling for any project — landing pages, blogs, product copy |
 
-### Python
+### PRD → code lifecycle
 
-| Skill | Description |
-|-------|-------------|
-| [python-best-practices](skills/python-best-practices) | Idiomatic Python 3.10+: type hints, dataclasses, error handling, generators, context managers, decorators, enums, pattern matching, pytest, async/await, packaging |
+| Skill | Purpose |
+|-------|---------|
+| [write-prd](skills/write-prd) | Research-informed PRD generator — autonomous, decision-making, status tracking |
+| [implement-story](skills/implement-story) | PRD story → code + commit with research, review, security gates |
+| [review-story](skills/review-story) | Review already-implemented code against its PRD (not the PRD document) |
 
-### Frontend & Web
+### Code quality scanners
 
-| Skill | Description |
-|-------|-------------|
-| [angular-best-practices](skills/angular-best-practices) | Angular v20+: standalone components, signals, DI, routing, forms, HttpClient, SSR, zoneless |
-| [primeng](skills/primeng) | PrimeNG v20: 80+ Angular UI components, theming, design tokens, Table, Dialog, Forms |
-| [next-best-practices](skills/next-best-practices) | Next.js App Router (v14/v15/v16+): file conventions, RSC boundaries, data fetching, caching, metadata, error handling, Server Actions, middleware, image/font optimization, bundling |
-| [clerk-best-practices](skills/clerk-best-practices) | Clerk auth for Next.js: setup, middleware, Server Components, Server Actions, API routes, organizations, RBAC, webhooks, caching, custom UI, testing |
-| [tailwind-best-practices](skills/tailwind-best-practices) | Tailwind CSS v4: CSS-first @theme, @utility, @custom-variant, responsive, dark mode, animations, 3D transforms, v3-to-v4 migration, Next.js integration |
-| [fumadocs](skills/fumadocs) | Fumadocs documentation framework for Next.js: MDX, layouts, UI components, search, OpenAPI, i18n |
-| [drizzle-orm](skills/drizzle-orm) | Drizzle ORM: PostgreSQL schemas, queries, relations, migrations, Neon serverless |
-| [neon-best-practices](skills/neon-best-practices) | Neon serverless Postgres for Next.js: driver setup, connection pooling, branching, autoscaling, RLS, Neon Auth |
-| [tanstack-query](skills/tanstack-query) | TanStack Query v5: data fetching, caching, mutations, and SSR |
-| [tanstack-form](skills/tanstack-form) | TanStack Form v1: type-safe forms, validation, arrays, SSR |
-| [tanstack-table](skills/tanstack-table) | TanStack Table v8: headless tables, sorting, filtering, pagination, selection |
-| [tanstack-store](skills/tanstack-store) | TanStack Store: framework-agnostic reactive state with Store, Derived, Effect |
-| [coss-ui](skills/coss-ui) | Component library built on Base UI and Tailwind CSS for React |
-| [react-email-best-practices](skills/react-email-best-practices) | React Email: components, Tailwind styling, rendering, sending via Resend/Nodemailer/SendGrid/SES, Outlook/Gmail compatibility |
+| Skill | Purpose |
+|-------|---------|
+| [react-doctor](skills/react-doctor) | React codebase health — security, performance, correctness, architecture |
+| [rust-doctor](skills/rust-doctor) | Deep Rust analysis with `rust-doctor` CLI, senior reviewer expertise |
+| [security-review](skills/security-review) | OWASP Top 10 audit with severity/confidence ratings |
+| [seo-warfare](skills/seo-warfare) | SEO + GEO/AEO audit for traditional and AI search engines |
 
-### 3D Graphics & Shaders
+### Tool scaffolding
 
-| Skill | Description |
-|-------|-------------|
-| [react-three-fiber](skills/react-three-fiber) | React Three Fiber: Canvas, hooks, events, drei, performance, models, portals |
-| [web-3d-shaders](skills/web-3d-shaders) | Shaders & real-time 3D on the Web: GLSL, Three.js, R3F, WebGPU |
-| [tsl-webgpu](skills/tsl-webgpu) | TSL (Three.js Shading Language) and WebGPU: shaders, compute, node materials |
-| [volumetric-lighting](skills/volumetric-lighting) | Volumetric lighting with post-processing raymarching for R3F/Three.js |
-| [caustics-r3f](skills/caustics-r3f) | Real-time caustic light effects: GLSL shaders, render targets, refraction for R3F |
-| [post-processing-shaders](skills/post-processing-shaders) | Creative post-processing: pixelation, cell patterns, optical illusions for R3F |
-| [painterly-kuwahara-shader](skills/painterly-kuwahara-shader) | Painterly Kuwahara filter: watercolor, oil paint, gouache effects for R3F |
-| [moebius-post-processing](skills/moebius-post-processing) | Moebius-style NPR: hand-drawn outlines, crosshatched shadows for R3F |
-| [retro-dithering-crt](skills/retro-dithering-crt) | Retro dithering, color quantization, CRT effects: Bayer, scanlines for R3F |
+| Skill | Purpose |
+|-------|---------|
+| [api2cli](skills/api2cli) | Generate CLI + AgentSkill for any REST API |
+| [mcp-server-dev](skills/mcp-server-dev) | Build MCP servers in TypeScript with `@modelcontextprotocol/sdk` |
+| [remotion-best-practices](skills/remotion-best-practices) | Remotion video creation in React — rules + templates |
 
-### GPU / CUDA
+### Skill lifecycle
 
-| Skill | Description |
-|-------|-------------|
-| [cuda-best-practices](skills/cuda-best-practices) | NVIDIA CUDA C/C++ GPU programming: kernels, memory hierarchy, coalescing, streams, profiling, Thrust/CUB |
+| Skill | Purpose |
+|-------|---------|
+| [skill-creator](skills/skill-creator) | Interactive guide for creating and updating skills |
+| [skill-doctor](skills/skill-doctor) | Audit a skill for structural quality, idempotency, and best-practice compliance |
 
-### AI & Data
+### Domain-specific
 
-| Skill | Description |
-|-------|-------------|
-| [rag-pgvector](skills/rag-pgvector) | RAG pipelines with pgvector: hybrid search, RRF fusion, chunking, reranking, citations |
+| Skill | Purpose |
+|-------|---------|
+| [extract-catalog](skills/extract-catalog) | Extract product metadata from supplier catalog PDFs (tiles, sanitary, furniture) |
+| [frontend-design](skills/frontend-design) | Production-grade, distinctive frontend UI design — editorial, human-crafted |
 
-### Tools & Workflows
+### Shared
 
-| Skill | Description |
-|-------|-------------|
-| [agent-swarm](skills/agent-swarm) | Agent teams orchestration: TeamCreate, SendMessage, tasks, 4 patterns, tmux, hooks, cleanup |
-| [mcp-server-dev](skills/mcp-server-dev) | Build MCP servers in TypeScript: tools, resources, prompts, transports |
-| [skill-creator](skills/skill-creator) | Interactive guide for creating and updating Claude Code skills |
+| Path | Purpose |
+|------|---------|
+| [_shared](skills/_shared) | Shared resources used across skills — agent boundaries, scope guard, three-tier constraints, synthesis templates |
+
+## Subagents
+
+Read-only subagents with isolated context windows. Used by meta-workflows for parallel, uncorrelated research.
+
+| Agent | Purpose |
+|-------|---------|
+| [agent-websearch](agents/agent-websearch.md) | Web research via Exa MCP (primary) + WebSearch/WebFetch fallback |
+| [agent-explore](agents/agent-explore.md) | Systematic codebase exploration — architecture mapping, flow tracing, blast-radius analysis |
+| [agent-docs](agents/agent-docs.md) | Version-accurate library documentation via ctx7 CLI |
 
 ## Install
 
-Install all skills:
+Clone into your Claude Code skills directory:
 
 ```bash
-npx skills add https://github.com/ArthurDEV44/skills
+git clone git@github.com:ArthurDEV44/skills.git /tmp/skills
+cp -r /tmp/skills/skills/* ~/.claude/skills/
+cp /tmp/skills/agents/*.md ~/.claude/agents/
 ```
 
-Install a specific skill:
-
-```bash
-npx skills add https://github.com/ArthurDEV44/skills --skill rust-traits
-```
+Claude Code picks them up automatically on next session. Skills with `name: <slug>` in their frontmatter are invocable as `/<slug>`; others auto-trigger based on their `description`.
 
 ## License
 
