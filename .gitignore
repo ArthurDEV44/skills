@@ -1,0 +1,10 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# OS / editor noise
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
