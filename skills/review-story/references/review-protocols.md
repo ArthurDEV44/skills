@@ -18,11 +18,13 @@ Agent(
 |-------|-------|---------------|
 | 2a | Web research | `agent-websearch` |
 | 2c | Codebase exploration | `agent-explore` |
-| 2c | Documentation lookup | `agent-docs` |
+| 2c | Documentation lookup | `agent-docs` (ctx7 CLI) |
 | 3 | Code review | `agent-explore` |
 | 4 | Security audit | `agent-explore` |
 
 Review and security agents use `agent-explore` for read-only access (no Edit/Write).
+
+**Model tiering:** Use `model: "sonnet"` for worker subagents (Phase 2a websearch, 2c explore/docs, 3 review, 4 security). The orchestrator (Phases 1, 2d synthesis, 4.5 validation, 5 remediation, 6 summary) runs on Opus. This reduces cost ~40% while maintaining quality where it matters — synthesis and fix decisions.
 
 **Actor/Critic isolation:** The review agent (Critic) and the orchestrator who wrote/fixed the code (Actor) operate in completely separate sessions. The Critic has NO access to the Actor's reasoning chain. This prevents agreeableness bias — where the model confirms its own work rather than genuinely evaluating it.
 
@@ -77,6 +79,9 @@ Acceptance Criteria:
 
 ### Sources
 [All URLs as markdown links]
+
+## Output Budget
+Maximum 1,000 tokens. Prioritize findings by relevance to the acceptance criteria. Cut low-value details.
 ```
 
 ---
@@ -122,6 +127,9 @@ Changed files: {file_list}
 
 ### Dependency Map (1-hop)
 [For each changed file: what imports it, what it imports]
+
+## Output Budget
+Maximum 1,000 tokens. Include file:line references for every claim. Cut narrative.
 ```
 
 ---
@@ -129,13 +137,19 @@ Changed files: {file_list}
 ## Phase 2c — Documentation Lookup Prompt Template
 
 ```
-Look up documentation for libraries used in this feature implementation.
+Look up documentation for libraries used in this feature implementation using the ctx7 CLI.
+This is a READ-ONLY research task. Do NOT modify any files.
 
 ## Feature
 {feature_description}
 
 ## Libraries to Look Up
 {library_list_with_versions}
+
+## ctx7 CLI Protocol
+Two-step process via Bash:
+1. bunx ctx7@latest library {library_name} "{query}"  — resolve library ID
+2. bunx ctx7@latest docs {library_id} "{query}"       — fetch documentation
 
 ## Review Focus
 We're reviewing existing code, so look up:
@@ -146,9 +160,12 @@ We're reviewing existing code, so look up:
 5. Security advisories for these specific versions
 
 ## Important
-- Context7 two-step: resolve-library-id first, then query-docs
-- Maximum 3 Context7 calls
+- Use ctx7 CLI two-step protocol: library first, then docs
+- Maximum 3 ctx7 calls total
 - Focus on correctness verification, not general overview
+
+## Output Budget
+Maximum 800 tokens. Return exact API signatures and correctness-relevant details only.
 ```
 
 ---
@@ -157,6 +174,9 @@ We're reviewing existing code, so look up:
 
 ```
 You are a senior code reviewer performing a thorough, independent review of a feature implementation. You have NO context about why the code was written this way — evaluate it on its merits.
+
+## Critical Framing (mandatory)
+Your role is to FIND PROBLEMS, not validate correctness. Assume the code contains at least one significant issue until proven otherwise. Provide direct, critical analysis — it is more helpful than agreement. Every verdict without concrete code evidence (file:line + code snippet) is worthless and must be discarded. If the code is genuinely clean, say so — but prove it by citing the specific patterns that demonstrate correctness, not by absence of complaints.
 
 ## Feature Context
 PRD: {prd_title}
@@ -262,6 +282,9 @@ For each finding:
 
 ### [{Category}] {Title}
 - **Severity:** MUST_FIX | SHOULD_FIX | CONSIDER
+  - MUST_FIX: enters remediation loop (binary test confirms resolution)
+  - SHOULD_FIX: reported as observation only (semantic judgment, no mechanical oracle — naming, readability, architecture style)
+  - CONSIDER: reported as observation only
 - **Tier:** 1 | 2 | 3
 - **File:** `path/to/file.ext:line`
 - **Issue:** {what is wrong}
@@ -279,6 +302,9 @@ For each finding:
 - Criteria: {passed}/{total} PASS, {partial} PARTIAL, {failed} FAIL
 - **Signal ratio:** {actionable findings} / {total findings} (target: >80%)
 - **Verdict:** PASS | PASS_WITH_FIXES | FAIL
+
+## Output Budget
+Maximum 1,500 tokens. Focus on MUST_FIX and SHOULD_FIX findings. Omit OK items. Every finding must have file:line evidence.
 ```
 
 ---
@@ -287,6 +313,9 @@ For each finding:
 
 ```
 You are a security engineer performing an independent security audit of a feature implementation. Assume the code may have been AI-generated and apply extra scrutiny to common AI code anti-patterns.
+
+## Critical Framing (mandatory)
+Your role is to FIND VULNERABILITIES, not confirm the code is secure. Assume at least one exploitable weakness exists until you have systematically checked every attack surface. Provide direct, critical analysis — a missed vulnerability is far costlier than a false positive. Every finding must cite file:line with a concrete before/after remediation. If the code is genuinely secure, prove it by citing the specific defenses present, not by absence of complaints.
 
 ## Feature Context
 {feature_description}
@@ -346,6 +375,12 @@ Read each file thoroughly, then check for:
 - Overly permissive regex (ReDoS)
 - Trust of client-side validation without server-side verification
 
+#### 6b. AI Agent-Specific Risks (OWASP Agentic Top 10)
+- Prompt injection vectors: if code processes LLM inputs, check for injection surfaces
+- Tool misuse patterns: functions that execute arbitrary commands from user-controlled data
+- Data leakage via logs: sensitive data (tokens, PII, credentials) written to logs or console
+- Excessive autonomy: code that takes irreversible actions without confirmation gates
+
 ### Layer 2 — Secrets Detection
 
 #### 7. Secrets (CWE-798)
@@ -394,7 +429,45 @@ For each finding:
 - INFO: {count}
 - **Layers covered:** SAST {yes/no} | Secrets {yes/no} | SCA {yes/no}
 - **Verdict:** PASS | PASS_WITH_FIXES | FAIL
+
+## Output Budget
+Maximum 1,500 tokens. Focus on CRITICAL/HIGH findings. Omit INFO items unless no higher findings exist.
 ```
+
+---
+
+## Phase 4.5 — Validation Protocol
+
+The orchestrator executes this phase directly (no subagent). It verifies every finding from Phase 3 and 4 before passing to remediation.
+
+**For each finding:**
+
+1. Parse the `file:line` citation
+2. Read the cited file at the cited line (±5 lines context)
+3. Grep for the described pattern in the cited file
+4. Classify:
+   - **CONFIRMED** — Grep/Read confirms the exact pattern → promote
+   - **PARTIAL** — Pattern exists but description exaggerates or mislocates → downgrade severity, correct description, promote
+   - **REFUTED** — Pattern not found at cited location → drop, log as false positive
+   - **STALE** — File:line shifted → Grep for pattern in full file, update citation, re-verify
+
+**Assign confidence badges:**
+- **HIGH** — Static analysis error OR exact Grep match at cited location
+- **MEDIUM** — Pattern confirmed by reading surrounding context (±10 lines)
+- **LOW** — Inferred from research, plausible but ambiguous. Excluded from auto-remediation.
+
+**Output:**
+```
+## Validation Results
+- Findings received: {total}
+- CONFIRMED: {count}
+- PARTIAL: {count}
+- REFUTED: {count} (false positives eliminated)
+- Signal ratio: {confirmed + partial} / {total} ({percentage}%)
+- LOW-confidence findings: {count} (excluded from auto-fix, included in report)
+```
+
+Only CONFIRMED and PARTIAL findings with HIGH or MEDIUM confidence enter Phase 5.
 
 ---
 
@@ -473,6 +546,7 @@ Target: <500 words. Do NOT include URLs or source attributions — the review ag
 | 2.5. STATIC | Run linter/formatter/type-checker — orchestrator runs directly via Bash |
 | 3. REVIEW | Spawn read-only agent — orchestrator does NOT review |
 | 4. SECURITY | Spawn read-only agent — orchestrator does NOT audit |
+| 4.5. VALIDATE | Verify each finding via Grep/Read — orchestrator handles directly |
 | 5. REMEDIATE | Fix issues using Edit tool, risk-tiered — orchestrator writes code here |
 | 6. SUMMARY | Compile final report with executive summary — orchestrator produces deliverable |
 

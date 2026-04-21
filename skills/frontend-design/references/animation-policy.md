@@ -75,6 +75,27 @@ input:focus {
 }
 ```
 
+### View Transitions API (if requested)
+The View Transitions API (baseline 2025) provides native page transitions.
+Prefer it over JavaScript route animation libraries when the user requests page transitions.
+
+```css
+/* Enable for same-document navigations */
+@view-transition {
+  navigation: auto;
+}
+
+/* Customize the transition */
+::view-transition-old(root) {
+  animation: fade-out 200ms ease;
+}
+::view-transition-new(root) {
+  animation: fade-in 200ms ease;
+}
+```
+
+Use ONLY when the user explicitly requests page transitions. Never add by default.
+
 ## Forbidden Animations
 
 These MUST NOT be used unless the user explicitly requests them by name:
@@ -112,16 +133,8 @@ animation library (GSAP, Motion) when the animation genuinely requires:
 - Animation coordination across multiple elements
 
 ### Respect Accessibility
-```css
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-```
-This is NON-NEGOTIABLE. Every page with any animation must include this.
+Include the `prefers-reduced-motion` reset from `accessibility.md`. This is NON-NEGOTIABLE
+for every page with any animation.
 
 ### Duration Guidelines
 - Micro-interactions (hover, press): 100-200ms

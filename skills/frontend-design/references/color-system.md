@@ -23,6 +23,8 @@ without manual tuning.
 --blue-700: oklch(35% 0.14 240);
 ```
 
+**Figma gap:** Figma only supports RGB/HSL natively — OKLCH values must be converted for Figma handoff or use plugins like OKLCH Color Picker.
+
 ### OKLCH Syntax
 ```
 oklch(L% C H / A)
@@ -214,6 +216,11 @@ It is NOT used for:
 }
 ```
 
+The semantic token architecture above follows a three-tier pattern aligned with the
+[W3C Design Tokens Community Group](https://www.w3.org/community/design-tokens/) spec:
+Tier 1 (primitives) → Tier 2 (semantic aliases) → Tier 3 (component overrides, rare).
+Tier 1 + Tier 2 live in `globals.css`. Tier 3 lives in the component file that owns it.
+
 ## Dark Mode
 
 If implementing dark mode, do NOT simply invert colors. Design it as a separate OKLCH palette:
@@ -223,6 +230,25 @@ If implementing dark mode, do NOT simply invert colors. Design it as a separate 
 - Accent colors may need higher lightness to maintain contrast
 - Borders become more visible (higher lightness) as they're primary separators in dark mode
 - Shadows become nearly invisible — use borders and background shifts instead
+
+## OKLCH Compatibility
+
+OKLCH is the primary color space (93%+ browser support). However, some tools do not support it:
+- **html2canvas** throws "unsupported color function oklch()" errors
+- **Chart.js** has animation failures with CSS Level 4 colors
+- **Figma** lacks native OKLCH support (requires plugins)
+
+If the project uses canvas rendering, charting libraries, or server-side image generation,
+provide hex fallbacks alongside OKLCH values:
+
+```css
+:root {
+  --color-accent: oklch(42% 0.1 160);
+  --color-accent-hex: #2d7a4f; /* fallback for canvas/charting libraries */
+}
+```
+
+Use `@supports (color: oklch(0% 0 0))` for progressive enhancement when targeting older browsers.
 
 ## What NOT To Do
 

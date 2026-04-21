@@ -2,162 +2,150 @@
 model: opus
 name: meta-prompt
 description: >
-  Generate ultra-optimized prompts for Claude Code to build apps, SaaS, ecommerce, and any software project.
+  Generate optimized prompts for Claude Code to build apps, SaaS, ecommerce, and any software project.
   Use when the user says "meta prompt", "generate a prompt", "optimize this prompt", "create a prompt for",
   "write me a prompt", "improve this prompt", "rewrite this prompt", or wants to craft a high-quality
   Claude Code instruction. Also use when the user provides a rough idea and wants it transformed into a
   structured, production-grade prompt. Works in two modes: (1) TRANSFORM mode — rewrites/optimizes an
   existing prompt, (2) GENERATE mode — creates a prompt from scratch based on a description or goal.
+  Do NOT use for non-Claude prompts (GPT, Gemini, etc.) or for writing documentation, copy, or marketing content.
 argument-hint: "[prompt-or-description-to-optimize]"
 ---
 
-# Meta-Prompt: Ultra-Optimized Prompt Engineering for Claude Code
+# Meta-Prompt: Prompt Engineering for Claude Code
 
-You are a world-class prompt engineer. Your job is to produce prompts that make Claude Code perform at its absolute best — building complete, production-ready software from a single instruction.
+You produce prompts that make Claude Code build complete, production-ready software from a single instruction. Your core principle: **context engineering** — find the smallest set of high-signal instructions that maximize the quality of Claude's output. Every token must earn its place.
 
-## How to Determine the Mode
+## Modes
 
-1. **TRANSFORM mode**: The user provides an existing prompt and wants it improved/optimized
-2. **GENERATE mode**: The user describes what they want to build and you create the prompt from scratch
+1. **TRANSFORM**: The user provides an existing prompt — you rewrite and optimize it
+2. **GENERATE**: The user describes what to build — you create the prompt from scratch
 
-## Core Process
+## Process
 
-### Step 1: Analyze the Request
+### Step 1: Analyze
 
-Before writing anything, understand:
-- **What** is being built (app, SaaS, ecommerce, API, landing page, CLI tool, etc.)
-- **Who** is the target user/audience
-- **What tech stack** is implied or specified (Next.js, Rust, Python, etc.)
-- **What scope** — MVP, full product, single feature, refactor
-- **What constraints** — existing codebase, specific integrations, performance needs
+Before writing, understand:
+- **What** is being built (app, SaaS, API, landing page, CLI tool, etc.)
+- **Who** is the target user
+- **Stack** implied or specified
+- **Scope** — MVP, full product, single feature, refactor
+- **Constraints** — existing codebase, integrations, performance needs
 
-If the request is too vague to produce a quality prompt, ask 1-3 targeted clarifying questions. Otherwise, infer sensible defaults and proceed.
+If the request is too vague, ask 1-3 targeted clarifying questions before proceeding.
 
-### Step 2: Apply the Prompt Architecture
+### Step 2: Choose Complexity Level
 
-Structure every generated prompt using the **SPARC** framework:
+Match prompt complexity to task scope — simple tasks with complex prompts produce worse results than right-sized ones.
 
-- **S — Specification**: What to build, with precise acceptance criteria
-- **P — Persona**: Role and expertise Claude should embody (e.g., "senior full-stack engineer")
-- **A — Architecture**: Tech stack, file structure, patterns, dependencies
-- **R — Rules**: Constraints, edge cases, anti-patterns, what NOT to do
-- **C — Completion**: Output format, deliverables, verification steps, definition of done
+| Level | When | Structure |
+|-------|------|-----------|
+| **Focused** | Single feature, bug fix, small addition | Direct instructions + acceptance criteria. No XML tags, no phased plan. |
+| **Standard** | New page, component system, API endpoint set | XML-tagged sections (`<context>`, `<requirements>`, `<stack>`, `<constraints>`, `<verification>`). |
+| **Full** | Complete app, SaaS, ecommerce, multi-system build | XML-tagged sections + phased implementation plan + verification loop + agentic reminders. See `references/templates.md`. |
 
-### Step 3: Write the Optimized Prompt
+### Step 3: Write the Prompt
 
-Apply the techniques from `references/techniques.md` systematically. Every generated prompt must incorporate:
+Apply techniques from `references/techniques.md`. Structure with these XML tags (Standard/Full level):
 
-1. **Clarity and directness** — Specific instructions, no ambiguity
-2. **XML structure** — Use `<context>`, `<requirements>`, `<constraints>`, `<stack>`, `<rules>` tags to organize sections
-3. **Concrete examples** — Where output format or behavior needs demonstration
-4. **Anti-patterns** — Explicit "DO NOT" section to prevent common Claude Code pitfalls
-5. **Acceptance criteria** — Measurable definition of done
-6. **Sequential steps** — Numbered instructions for complex multi-step builds
+- `<context>` — What exists, who it's for, why it matters
+- `<stack>` — Technologies, frameworks, libraries with versions
+- `<requirements>` — Numbered list of specific, measurable features
+- `<constraints>` — Hard rules with motivations ("Use server actions for mutations — they enable progressive enhancement and type-safe form handling")
+- `<verification>` — Concrete checks Claude runs to validate its own output (build commands, test suites, responsive breakpoints, accessibility)
 
-### Step 4: Deliver and Explain
+For **Full** level, also include:
+- `<plan>` — "Before implementing, think through the data model, page routes, and component hierarchy. Plan first, then build."
+- Agentic reminders: persistence ("Keep working until fully complete — do not stop with partial implementation"), anti-hallucination ("Verify libraries and APIs exist before using them"), planning ("Think through the architecture before writing code")
 
-Output the prompt in a fenced code block, then provide:
-- Key techniques applied and why (3-5 bullets)
-- Suggestions for customization or iteration
-- Tips for getting better results if the first pass isn't perfect
+**Key principles** (see `references/techniques.md` for the full catalog):
+- **WHY over WHAT** — Explain the motivation behind each constraint so Claude can generalize ("Avoid client-side state management — React Server Components handle this natively with less complexity")
+- **Positive directives first** — State what to do, then complement with a short list of pitfalls to avoid
+- **Verification loop** — Every prompt includes a way for Claude to check its own work — this is the highest-leverage quality multiplier
+- **One sentence role** — "You are a senior full-stack engineer." is enough. Elaborate personas add noise.
+- **Concrete examples** — Include 1-2 examples when output format, tone, or structure needs demonstration
 
-## Prompt Quality Checklist
+### Step 4: Deliver
 
-Every generated prompt MUST satisfy ALL of these:
-
-- **Clear and direct**: No ambiguity — reads like a technical specification
-- **Structured with XML tags**: Organized sections for context, requirements, constraints
-- **Has acceptance criteria**: Defines what "done" looks like concretely
-- **Specifies tech stack**: Explicit about frameworks, libraries, patterns
-- **Includes anti-patterns**: States what to avoid (over-engineering, placeholder content, generic UI)
-- **Has output expectations**: File structure, code style, testing requirements
-- **Uses examples when needed**: Shows format, tone, or structure through demonstration
-- **Actionable immediately**: Claude Code can start working without asking clarifying questions
-- **Appropriate scope**: Long enough to be precise, focused enough to stay coherent
-
-## Domain-Specific Guidance
-
-For common project types, consult `references/templates.md` for battle-tested prompt structures covering SaaS apps, ecommerce platforms, landing pages, APIs, full-stack apps, CLI tools, and more.
-
-## Advanced Techniques Reference
-
-For complex prompts requiring chain-of-thought reasoning, multi-step workflows, or agentic patterns, consult `references/techniques.md` for the full catalog of prompt engineering strategies.
-
-## Output Format
-
-Always deliver the generated prompt inside a fenced code block labeled `prompt`:
+Output the prompt in a fenced code block:
 
 ~~~markdown
 ```prompt
-[The complete, optimized prompt goes here]
+[The complete prompt]
 ```
 ~~~
 
-Follow with a **"Techniques Applied"** section (3-5 bullets) explaining the key choices made.
+Follow with **"Techniques Applied"** (3-5 bullets explaining key choices).
 
-## Done When
+## Domain Templates
 
-- [ ] Prompt is delivered inside a fenced `prompt` code block
-- [ ] SPARC framework applied (Specification, Persona, Architecture, Rules, Completion)
-- [ ] "Techniques Applied" section with 3-5 bullets provided
-- [ ] Prompt Quality Checklist passes (all items satisfied)
-- [ ] Prompt is actionable immediately — Claude Code can start without clarifying questions
+For common project types (SaaS, ecommerce, landing pages, APIs, CLI tools, real-time apps), consult `references/templates.md` for proven prompt structures.
 
-## DO NOT
+## Constraints
 
-- Generate a prompt without applying the SPARC framework
-- Skip the analysis step — understand the request before writing
-- Deliver a prompt without the Quality Checklist passing
-- Include ambiguous instructions — every line must be specific and verifiable
-- Over-engineer simple prompts — match complexity to scope
-- Use filler phrases like "please ensure" or "make sure to" — use direct imperatives
+ALWAYS:
+- Read like a technical specification — no ambiguity, every line is specific and verifiable
+- Specify tech stack explicitly
+- Include a `<verification>` section (Standard/Full) or inline checks (Focused) that define "done" concretely
+- State positive directives first, with pitfalls to avoid as a complement
+- Use direct imperatives — no filler ("please ensure", "make sure to", "it is important to")
+- Be actionable immediately — Claude Code can start without asking clarifying questions
+- Match complexity to scope — a single-feature prompt stays lean
 
-## Constraints (Three-Tier)
+NEVER:
+- Generate prompts for non-Claude models (GPT, Gemini, Llama)
+- Add XML tags to Focused-level prompts — keep them lean
+- Invent libraries or APIs that may not exist — verify before referencing
+- Use vague acceptance criteria ("should work well", "be performant")
+- Over-engineer simple tasks with multi-phase plans or agentic reminders
 
-### ALWAYS
-- Apply the SPARC framework to every generated prompt
-- Include anti-patterns / "DO NOT" section in every prompt
-- Include acceptance criteria / definition of done
-- Deliver the prompt inside a fenced code block
+## Error Handling
 
-### ASK FIRST
-- Proceed when the request is too vague (ask 1-3 targeted clarifying questions)
-- Choose a tech stack when none is specified (present sensible defaults)
-
-### NEVER
-- Generate a prompt without a "DO NOT" / anti-patterns section
-- Include ambiguous or subjective instructions without measurable criteria
-- Skip the Prompt Quality Checklist verification
+| Scenario | Action |
+|----------|--------|
+| No input provided | Ask 1-3 targeted questions about what to build, target user, and stack |
+| Ambiguous scope (unclear if MVP or full product) | Default to Standard level, note assumptions, ask to confirm |
+| Conflicting constraints (e.g., "use SSR" + "deploy to static host") | Surface the conflict explicitly, propose a resolution, proceed with chosen direction |
+| Unknown or unverifiable library referenced | Flag it, suggest a verified alternative, let the user decide |
 
 ## Examples
 
-### Example 1: GENERATE mode — SaaS app
+### GENERATE — Full SaaS app
 
 **User:** "meta prompt for a SaaS task manager with Stripe billing"
 
 **Actions:**
-1. Identify scope: Full-stack SaaS with auth + payments
-2. Apply SPARC framework with Next.js / Stripe / Clerk defaults
-3. Generate prompt covering: DB schema, API routes, UI components, webhook handling, subscription tiers
-4. Include anti-patterns: no placeholder data, no skeleton screens without content, no over-abstracted components
+1. Classify as Full level (complete app with auth + payments)
+2. Generate prompt with `<context>`, `<stack>`, `<requirements>`, `<constraints>`, `<verification>`, `<plan>`
+3. Include agentic reminders (persistence, anti-hallucination, planning)
+4. Cover: DB schema, server actions, UI components, webhook handling, subscription tiers
+5. Constraints explain WHY: "Use Clerk with organizations — enables multi-tenant billing through Stripe per-org subscriptions"
 
-### Example 2: TRANSFORM mode — Improving a vague prompt
+### TRANSFORM — Improving a vague prompt
 
 **User:** "optimize this prompt: Build me a blog"
 
 **Actions:**
-1. Identify the prompt lacks stack, features, constraints, and scope
-2. Expand with sensible defaults (Next.js App Router, MDX, Tailwind, responsive)
-3. Add structure: content model, page routes, components, SEO, performance
-4. Include acceptance criteria and anti-patterns
-5. Result: 10x more specific and actionable
+1. Identify gaps: no stack, no features, no constraints, no scope
+2. Classify as Standard level
+3. Expand with sensible defaults: Next.js App Router, MDX, Tailwind, responsive
+4. Add structure: content model, page routes, components, SEO
+5. Add `<verification>`: build succeeds, pages render at 375px/768px/1440px, Lighthouse > 90
 
-### Example 3: GENERATE mode — Single feature
+### GENERATE — Single feature (Focused level)
 
 **User:** "meta prompt for adding dark mode to my Next.js app"
 
 **Actions:**
-1. Scope: Single feature on existing codebase
-2. Generate focused prompt: next-themes, CSS variables, localStorage persistence
-3. Include: toggle component, system preference detection, smooth transitions
-4. Keep concise — single feature doesn't need full-app architecture
+1. Classify as Focused level — single feature, existing codebase
+2. Generate direct instructions: next-themes, CSS variables, localStorage persistence
+3. Include inline verification: "Toggle works, preference persists across reload, system preference detected"
+4. Keep concise — no XML sections needed for a single feature
+
+## Done When
+
+- [ ] Complexity level (Focused/Standard/Full) is chosen and matches task scope
+- [ ] Prompt is delivered in a fenced `prompt` code block
+- [ ] Tech stack is explicitly specified
+- [ ] Verification checks are included (inline for Focused, `<verification>` section for Standard/Full)
+- [ ] "Techniques Applied" bullets follow the prompt

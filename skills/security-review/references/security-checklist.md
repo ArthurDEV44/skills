@@ -1,5 +1,19 @@
 # Security Checklist — Detailed Vulnerability Patterns
 
+## Table of Contents
+
+1. [Injection](#1-injection) — SQL, XSS, Command, Path Traversal, Template
+2. [Authentication & Authorization](#2-authentication--authorization) — Broken Access, Auth Bypass, IDOR
+3. [Cryptography](#3-cryptography) — Weak Algos, Hardcoded Keys, Insecure Random
+4. [Secrets Exposure](#4-secrets-exposure) — Hardcoded Credentials, Committed Env Files
+5. [Data Handling](#5-data-handling) — Deserialization, Sensitive Data, Input Validation
+6. [Configuration](#6-configuration) — Misconfiguration, CSRF, SSRF
+7. [Dependencies](#7-dependencies) — CVEs, Unmaintained Packages
+8. [AI-Generated Code Anti-Patterns](#8-ai-generated-code-anti-patterns) — eval, innerHTML, Math.random
+9. [Calibration Examples](#9-calibration-examples) — True Positive, False Positive, Borderline
+
+---
+
 ## 1. Injection
 
 ### SQL Injection (CWE-89)
@@ -191,3 +205,103 @@ Patterns commonly introduced by AI code generation that are security-relevant:
 | `.unwrap()` on user input in Rust | Panic/DoS | Use `?` or `.unwrap_or_default()` |
 | Logging user input verbatim | Log injection | Sanitize before logging |
 | `cors({ origin: '*', credentials: true })` | Auth bypass | Specify allowed origins explicitly |
+
+## 9. Calibration Examples
+
+These examples calibrate the boundary between true positives, false positives, and borderline findings. Use them to anchor your severity and confidence assessments.
+
+### Example A — True Positive (CRITICAL, HIGH confidence)
+
+**Input code (Python/Flask):**
+```python
+@app.route("/user/<id>")
+def get_user(id):
+    query = f"SELECT * FROM users WHERE id={id}"
+    result = db.execute(query)
+    return jsonify(result.fetchone())
+```
+
+**Expected finding:**
+```
+[C-1] SQL Injection in User Lookup
+- File: app.py:3
+- Type: CWE-89: SQL Injection
+- Severity: CRITICAL | Confidence: HIGH
+- Description: User-controlled route parameter `id` is interpolated directly into
+  a SQL query via f-string. No parameterization or input validation.
+- Reasoning: Full dataflow traced — route parameter flows directly into db.execute()
+  with no sanitization. Exploitable remotely without authentication via crafted URL.
+  RCE possible on some database engines.
+- Remediation:
+  // Before (vulnerable)
+  query = f"SELECT * FROM users WHERE id={id}"
+  result = db.execute(query)
+
+  // After (fixed)
+  result = db.execute("SELECT * FROM users WHERE id = :id", {"id": id})
+```
+
+### Example B — False Positive (DO NOT flag)
+
+**Input code (Python/SQLAlchemy):**
+```python
+@app.route("/user/<int:user_id>")
+@login_required
+def get_user(user_id):
+    user = db.session.query(User).filter(User.id == user_id).first()
+    if user is None:
+        abort(404)
+    return jsonify(user.to_dict())
+```
+
+**Why this is NOT a finding:**
+- SQLAlchemy ORM generates parameterized queries internally. `User.id == user_id` produces `WHERE id = $1` with bound parameter.
+- Flask's `<int:user_id>` route converter rejects non-integer input at the routing layer.
+- `@login_required` provides authentication.
+- This is a safe, idiomatic pattern. Flagging it would be a false positive.
+
+**Note:** This may still warrant an INFO finding for missing ownership check (user A can access user B's data) — but that is an authorization issue (CWE-284), not SQL injection.
+
+### Example C — Borderline (MEDIUM severity, LOW confidence)
+
+**Input code (Node.js/Express):**
+```javascript
+app.get("/api/file", (req, res) => {
+  const filename = path.basename(req.query.name);
+  const filepath = path.join(__dirname, "uploads", filename);
+  if (fs.existsSync(filepath)) {
+    res.sendFile(filepath);
+  } else {
+    res.status(404).json({ error: "Not found" });
+  }
+});
+```
+
+**Expected finding:**
+```
+[M-1] Potential Path Traversal in File Serving
+- File: server.js:3
+- Type: CWE-22: Path Traversal
+- Severity: MEDIUM | Confidence: LOW
+- Description: User-controlled query parameter `name` is used to construct a file
+  path. path.basename() strips directory components, which mitigates basic ../
+  traversal, but does not protect against all edge cases.
+- Reasoning: path.basename() provides partial mitigation — it strips directory
+  separators on the current OS. However, it does not canonicalize (resolve symlinks)
+  and may behave differently on Windows vs Unix for mixed separators. The uploads
+  directory may contain symlinks. Confidence is LOW because the primary traversal
+  vector IS mitigated; the remaining risk is edge-case.
+- Remediation:
+  // Before (partial mitigation)
+  const filename = path.basename(req.query.name);
+  const filepath = path.join(__dirname, "uploads", filename);
+
+  // After (full mitigation)
+  const filename = path.basename(req.query.name);
+  const filepath = path.resolve(path.join(__dirname, "uploads", filename));
+  if (!filepath.startsWith(path.resolve(path.join(__dirname, "uploads")))) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+```
+
+**Why this calibration matters:** The code HAS a mitigation (path.basename). A monolithic scanner might either miss it entirely (false negative) or flag it as CRITICAL (false positive). The correct assessment acknowledges the mitigation, rates the residual risk, and assigns LOW confidence to signal "verify manually."

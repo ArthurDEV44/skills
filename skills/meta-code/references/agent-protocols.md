@@ -1,31 +1,28 @@
-# Agent Protocols — How Each Agent Is Invoked
+# Agent Protocols — Prompt Templates
 
-## Agent Spawning via Agent Tool
+Exact Agent tool parameters and prompt templates for each agent in the meta-code pipeline. For pipeline logic and step descriptions, see [SKILL.md](../SKILL.md).
 
-All agents are spawned using the `Agent` tool — NOT using TeamCreate or agent teams. meta-code is a defined pipeline, not a long-lived team collaboration.
+## Narrative Reframing Rule
 
-Each Agent tool call uses these parameters:
+When passing context to downstream agents (typed handoffs, research context), always frame prior findings in **third person**: "Web research found X", "A prior analysis identified Y" — never "I found X". This prevents the receiving agent from attributing prior findings to itself and avoids hallucinated action attribution (Google ADK production pattern).
 
-```
-Agent(
-  description: "3-5 word summary",
-  prompt: "Detailed instructions with user question + prior context",
-  subagent_type: "agent-type"
-)
-```
+## Five-Part Subagent Brief
 
-**No `team_name` or `name` parameters** — these are one-shot subagent calls, not team members.
+Every agent prompt follows this structure:
+1. **Objective** — what to find/answer
+2. **Output format** — exact sections and structure expected
+3. **Output budget** — max 1,500 tokens returned to orchestrator
+4. **Source/tool guidance** — what tools to use, what NOT to do
+5. **Task boundaries** — scope limits, what to skip
 
 ---
 
 ## Step 2: agent-websearch (RESEARCH)
 
-### Agent Tool Parameters
-
 ```
 Agent(
   description: "Web research on {topic}",
-  prompt: <see template below>,
+  prompt: <template below>,
   subagent_type: "agent-websearch"
 )
 ```
@@ -35,102 +32,73 @@ Agent(
 ```
 Research the following development question thoroughly using web search.
 
-## Question
+## Objective
 {user_question}
 
-## Sub-questions (if decomposed)
-{sub_questions_targeting_websearch — only for complex queries}
+{# If complex query with sub-questions:}
+## Sub-questions
+{sub_questions_targeting_websearch}
+
+## Done Criteria
+Your answer is complete ONLY when it addresses ALL of these:
+- Must answer: {must_answer_items_from_step_1b}
+- Must include: {must_include_items_from_step_1b}
+If you cannot address an item, explicitly note it as a gap — do NOT silently skip it.
 
 ## Search Strategy
-- Search for current best practices, recent articles, and official guidance related to this question.
-- If the question involves specific libraries or frameworks, search for their latest documentation and changelog.
-- If the question involves a technique or pattern, search for real-world examples and community consensus.
-- Use 2-3 complementary searches to cover different angles.
-- Include the current year (2026) in searches for time-sensitive topics.
+- Search for current best practices, recent articles, and official guidance.
+- If the question involves specific libraries, search for latest docs and changelogs.
+- Use 2-3 complementary searches covering different angles.
+- Include the current year in searches for time-sensitive topics.
 
-## Output Requirements
-Return your findings in this exact structure:
+## Dual-Perspective Protocol
+For each of your top 3 findings, run ONE additional search:
+  "{finding}" limitations OR problems OR alternatives
+Do NOT only search for confirming evidence. Report both supporting and challenging evidence.
+
+## Output Format
+Return findings in this exact structure (max 1,500 tokens total):
 
 ### Key Findings
 [Numbered list of 3-8 key findings, most important first]
 
 ### Libraries & Frameworks Mentioned
-[List any specific libraries, frameworks, or tools that are relevant to answering the question. Include version numbers if found. Format: "- library-name (vX.Y.Z if known)"]
+[Relevant libraries with version numbers if found. Format: "- library-name (vX.Y.Z if known)"]
 
 ### Best Practices
 [Specific, actionable recommendations from authoritative sources]
 
 ### Contradictions Detected
-[List any cases where different sources disagree on a claim. Format:
-- Claim: "{the claim}"
+[Cases where sources disagree. Format:
+- Claim: "{claim}"
   - Source A ({url}): says X
   - Source B ({url}): says Y
-If no contradictions found, write "None detected."]
+If none: "None detected."]
 
 ### Sources
-[All URLs consulted, formatted as markdown links]
+[All URLs consulted as markdown links with source tier annotation: T1 (official docs), T2 (major eng blog), T3 (community), T4 (AI-generated/SEO)]
+
+## Output Budget
+Return at most 1,500 tokens. Prioritize findings by relevance to the question, cut low-value details.
+
+## Task Boundaries
+- Do NOT read local code or files.
+- Do NOT run ctx7 CLI or look up library docs.
+- Focus on web-accessible information only.
 ```
 
-### Expected Output Structure
+### Typed Handoff Compression (orchestrator, after Step 2)
 
-The orchestrator extracts from Step 2 output:
-- `key_findings`: All content under "Key Findings" header
-- `libraries`: Parse library names from "Libraries & Frameworks Mentioned" section
-- `best_practices`: Content under "Best Practices" header
-- `contradictions`: Parsed from "Contradictions Detected" section
-- `sources`: URLs from "Sources" section
-
-### Compressed Summary for Downstream Steps
-
-Before passing to Steps 3/4, compress to:
-
-```
-## Research Context (for downstream agents)
-
-Key findings on "{user_question}":
-1. {finding_1}
-2. {finding_2}
-...
-
-Relevant libraries: {lib1} {version}, {lib2} {version}
-
-Contradictions to investigate: {contradiction_1_summary}
-```
-
-Target: <500 words. Strip URLs and detailed explanations. Keep only facts, library identifiers, and contradiction summaries.
+After Step 2 completes, the orchestrator compresses output into a typed handoff object (Step 3a). See [workflow-engine.md](workflow-engine.md) for the canonical Typed Handoff Format.
 
 ---
 
-## Step 3: agent-explore (EXPLORE)
-
-### Codebase Detection (run by orchestrator BEFORE spawning)
-
-Use Glob to check for project manifest files:
-
-```
-Glob: Cargo.toml
-Glob: package.json
-Glob: pyproject.toml
-Glob: go.mod
-```
-
-Run these 4 Glob calls in parallel. If ANY returns a result, `codebase_exists = true`.
-
-For additional detection (if all 4 return empty), check:
-```
-Glob: pom.xml
-Glob: build.gradle
-Glob: *.sln
-Glob: Makefile
-Glob: .git
-```
-
-### Agent Tool Parameters
+## Step 4: agent-explore (EXPLORE)
 
 ```
 Agent(
   description: "Explore codebase for {topic}",
-  prompt: <see template below>,
+  prompt: <template below>,
   subagent_type: "agent-explore"
 )
 ```
@@ -140,57 +108,50 @@ Agent(
 ```
 Explore the codebase in the current working directory to find code, patterns, and architecture relevant to the following question.
 
-## Question
+## Objective
 {user_question}
 
-## Research Context
-The following was found via web research (use this to guide what you look for):
+## Research Context (typed handoff)
+{step_3a_typed_handoff_object}
 
-{step_2_compressed_summary}
+## Done Criteria
+Your answer is complete ONLY when it addresses ALL of these:
+- Must answer: {must_answer_items_from_step_1b}
+- Must include: {must_include_items_from_step_1b}
+If you cannot address an item, explicitly note it as a gap — do NOT silently skip it.
 
 ## Exploration Focus
 1. Find existing code that relates to the question — functions, types, modules, handlers.
-2. Identify patterns and conventions the project uses that would affect how to implement or approach this.
-3. Check if there's already an implementation of what's being asked about (partial or complete).
-4. Note the project's architecture, relevant dependencies, and module structure.
-5. Focus your exploration on areas most relevant to the question — don't do a full project scan.
+2. Identify patterns and conventions that affect the approach.
+3. Check for existing implementations (partial or complete).
+4. Note architecture, dependencies, and module structure relevant to the question.
+5. Focus exploration on relevant areas — do not do a full project scan.
 
-## Contradiction Check
-If any of the web research recommendations conflict with how the codebase actually does things, note this explicitly:
-- What the web recommends vs. what the codebase does
-- Whether the codebase deviation appears intentional (custom wrapper, legacy, etc.)
+## Output Format
+Return findings with file:line references for every claim (max 1,500 tokens total).
 
-## Output Requirements
-Return findings with file:line references for every claim. Use the most appropriate exploration mode based on what the question requires.
-
-At the end of your findings, include a section:
+At the end, include:
 ### Contradictions with Web Research
-[List any conflicts between web research recommendations and actual codebase patterns. If none, write "None detected."]
+[Conflicts between web recommendations and codebase patterns. Note if deviations appear intentional. If none: "None detected."]
+
+## Output Budget
+Return at most 1,500 tokens. Prioritize findings by relevance, cut low-value details.
+
+## Task Boundaries
+- Do NOT fetch URLs or search the web.
+- Do NOT run ctx7 CLI or look up library docs.
+- Do NOT modify any files.
+- Read-only exploration of the codebase.
 ```
-
-### Expected Output
-
-agent-explore returns structured findings with file:line references following its internal output format. The orchestrator uses this output directly in Step 5 synthesis, including the contradictions section.
 
 ---
 
-## Step 4: agent-docs (DOCUMENT)
-
-### Library Extraction (run by orchestrator AFTER Step 2)
-
-Parse the Step 2 output to extract library names:
-
-1. Read the "Libraries & Frameworks Mentioned" section from Step 2 output.
-2. If Step 3 is also running (codebase exists), read the manifest file (Cargo.toml, package.json, etc.) to get exact version numbers.
-3. Select the top 1-2 libraries most relevant to the user's question.
-4. If no libraries identified from either source, skip Step 4.
-
-### Agent Tool Parameters
+## Step 4: docs via ctx7 CLI (DOCUMENT)
 
 ```
 Agent(
   description: "Fetch docs for {library}",
-  prompt: <see template below>,
+  prompt: <template below>,
   subagent_type: "agent-docs"
 )
 ```
@@ -198,16 +159,45 @@ Agent(
 ### Prompt Template
 
 ```
-Look up official documentation for the following libraries to answer a specific development question.
+Look up official documentation for the following libraries using the ctx7 CLI to answer a specific question.
+This is a READ-ONLY research task. Do NOT modify any files.
 
-## Question
+## Objective
 {user_question}
 
 ## Libraries to Look Up
 {library_list_with_versions}
 
-## Context
-This documentation lookup is part of a comprehensive research workflow. Web research has already found general information. Your job is to provide authoritative, version-accurate API details and code examples that web research cannot reliably provide.
+## ctx7 CLI Protocol (MUST follow)
+
+Two-step process: resolve library ID first, then query docs.
+
+### Step 1 — Resolve library ID
+Run via Bash:
+  bunx ctx7@latest library {library_name} "{user_question}"
+
+Select the most relevant result by name similarity, snippet count, and reputation.
+Note the library ID (format: /org/project).
+If a specific version is needed, use /org/project/version.
+
+### Step 2 — Query documentation
+Run via Bash:
+  bunx ctx7@latest docs {library_id} "{focused_query}"
+
+Use a specific, descriptive query — not single words.
+
+### Hard limits
+- Maximum 3 ctx7 calls total (combining library + docs calls).
+- If you cannot find what you need after 3 attempts, use the best result you have.
+
+## Research Context (typed handoff)
+{step_3a_typed_handoff_object}
+
+## Done Criteria
+Your answer is complete ONLY when it addresses ALL of these:
+- Must answer: {must_answer_items_from_step_1b}
+- Must include: {must_include_items_from_step_1b}
+If you cannot address an item, explicitly note it as a gap — do NOT silently skip it.
 
 Focus on:
 1. Exact API signatures and types relevant to the question
@@ -216,22 +206,15 @@ Focus on:
 4. Configuration or setup requirements
 
 ## Contradiction Check
-Web research made the following claims about these libraries:
-{relevant_web_research_claims}
+Web research claimed:
+{relevant_web_research_claims_from_handoff}
 
-If any of these claims conflict with official documentation, note the discrepancy explicitly.
+If any claims conflict with official documentation, note the discrepancy.
 
-## Important
-- Use the Context7 two-step protocol: resolve-library-id first, then query-docs.
-- Maximum 3 Context7 calls total. Plan queries carefully.
-- If a version is specified, use the versioned library ID if available.
-- Do NOT repeat general information that web search would cover. Focus on precise API details and examples.
-
-## Output Requirements
-Return findings in this structure:
+## Output Format (max 1,500 tokens total)
 
 ### Answer
-[Direct answer to the question based on official docs]
+[Direct answer based on official docs]
 
 ### Code Examples
 [Runnable snippets from official docs]
@@ -240,127 +223,297 @@ Return findings in this structure:
 [Signatures, types, parameters]
 
 ### Version Notes
-[Version-specific behavior, deprecations, migration notes. If none, write "N/A."]
+[Version-specific behavior. If none: "N/A."]
 
 ### Contradictions with Web Research
-[List any conflicts between official docs and web research claims. If none, write "None detected."]
+[Conflicts between docs and web claims. If none: "None detected."]
 
 ### Sources
-[Context7 library IDs and any URLs]
+[ctx7 library IDs used and relevant doc sections]
+
+## Output Budget
+Return at most 1,500 tokens. Prioritize precise API details over general information.
+
+## Task Boundaries
+- Use ctx7 CLI two-step protocol: library first, then docs.
+- Maximum 3 ctx7 calls total.
+- Do NOT fetch arbitrary URLs or search the web.
+- Do NOT read local code beyond manifest files for version info.
+- Do NOT modify any files — this is read-only research.
+- Do NOT repeat general information — focus on precise API details.
 ```
-
-### Expected Output
-
-agent-docs returns structured documentation with the sections listed above. The orchestrator uses this output directly in Step 5 synthesis, including the contradictions section.
 
 ---
 
-## Refinement Agent Prompts (Step 7)
-
-When Step 6 (VERIFY) identifies gaps, refinement agents are spawned with focused prompts. These are narrower than the original prompts — they target specific gaps only.
-
-### Refinement: agent-websearch
+## Step 6: Challenge Agent (CHALLENGE)
 
 ```
 Agent(
-  description: "Refine: {gap_description_short}",
-  prompt: "A prior web research pass on '{user_question}' identified the following specific gap:
-
-## Gap
-{gap_description}
-
-## What Was Already Found
-{summary_of_existing_findings_on_this_topic}
-
-## Task
-Search specifically for information that fills this gap. Do NOT repeat broad research — focus narrowly on:
-{target_query}
-
-Return findings in the same format as before (Key Findings, Sources, Contradictions Detected).",
+  description: "Challenge claims on {topic}",
+  prompt: <template below>,
   subagent_type: "agent-websearch"
 )
 ```
 
-### Refinement: agent-explore
+**Skip for `simple` queries.**
+
+The challenge agent is an independent adversarial reviewer with a fresh context window. It never sees the full synthesis draft — only the extracted claims.
+
+### Prompt Template
+
+```
+You are an independent reviewer. Your job is to challenge the following claims by searching for counter-evidence, known limitations, and edge cases.
+
+## Claims to Challenge
+{extracted_top_3_5_claims_with_sources}
+
+## Original Question Context
+{user_question_summary}
+
+## Skepticism Protocol
+You are a SKEPTICAL reviewer, not a helpful assistant. Your default stance is doubt.
+- Assume each claim is wrong until evidence proves otherwise.
+- A claim supported by a single source is WEAK, not confirmed.
+- "No counter-evidence found" after 2 searches per claim = CONFIRMED, not before.
+- Do NOT soften your verdicts. WEAKENED means WEAKENED. REFUTED means REFUTED.
+- Do NOT give the benefit of the doubt — that is the synthesizer's job, not yours.
+
+## Your Task
+For EACH claim above:
+1. Search for counter-evidence: known limitations, edge cases, or contradicting sources.
+2. Search for recency: is this claim still current, or has it been superseded?
+3. Assess strength: does the cited source actually support the claim as stated?
+
+## Output Format (max 1,500 tokens total)
+
+For each claim, return ONE of:
+- **CONFIRMED** — counter-search found no contradicting evidence. Claim is solid.
+- **WEAKENED** — found limitations or nuance. Detail: {what was found} | Source: {url}
+- **REFUTED** — found strong counter-evidence. Detail: {what was found} | Source: {url}
+
+### Summary
+[1-3 sentences: overall assessment of claim quality]
+
+## Output Budget
+Return at most 1,500 tokens. Be concise — verdict + evidence per claim.
+
+## Task Boundaries
+- Do NOT read local code or files.
+- Do NOT see or evaluate the full synthesis draft — only the claims listed above.
+- Search specifically for counter-evidence, not confirming evidence.
+- If you find no counter-evidence after 2 searches per claim, mark as CONFIRMED.
+```
+
+---
+
+## Step 2: agent-websearch — Critical Angle (complex queries only)
+
+Spawned in parallel with the supportive-angle agent. Both use a SINGLE Agent tool message.
 
 ```
 Agent(
-  description: "Refine: {gap_description_short}",
-  prompt: "A prior codebase exploration on '{user_question}' missed the following:
+  description: "Web research on {topic} — critical angle",
+  prompt: <template below>,
+  subagent_type: "agent-websearch"
+)
+```
 
-## Gap
+### Prompt Template
+
+```
+Research the LIMITATIONS, PROBLEMS, and ALTERNATIVES for the following development question.
+
+## Objective
+{user_question}
+
+## Critical Angle
+You are specifically searching for:
+1. Known limitations, gotchas, and edge cases
+2. Common problems and failure modes reported by practitioners
+3. Alternative approaches that competing sources recommend
+4. Deprecations, breaking changes, or upcoming replacements
+5. Performance issues, scalability concerns, or security warnings
+
+Do NOT search for best practices or recommendations — the other agent handles that.
+
+## Done Criteria
+Your answer is complete ONLY when it addresses ALL of these:
+- Must answer: {must_answer_items_from_step_1b}
+- Must include: {must_include_items_from_step_1b}
+If you cannot address an item, explicitly note it as a gap.
+
+## Search Strategy
+- Use searches like: "{topic} problems", "{topic} alternatives to", "{topic} deprecated", "{topic} known issues"
+- Include the current year in searches for time-sensitive topics.
+- Prioritize practitioner experience reports over marketing content.
+
+## Output Format
+Return findings in this exact structure (max 1,500 tokens total):
+
+### Limitations & Problems
+[Known issues, gotchas, edge cases — most impactful first]
+
+### Alternatives
+[Competing approaches with trade-offs]
+
+### Deprecations & Breaking Changes
+[If any. "None found." if none.]
+
+### Sources
+[All URLs with tier annotations]
+
+## Output Budget
+Return at most 1,500 tokens.
+
+## Task Boundaries
+- Do NOT read local code or files.
+- Do NOT run ctx7 CLI.
+- Do NOT search for best practices — only critical/challenging evidence.
+```
+
+---
+
+## Step 7d: Evaluator Agent (complex queries only)
+
+Independent evaluator that receives the synthesis but has NOT generated it. Enforces generator-evaluator separation.
+
+```
+Agent(
+  description: "Evaluate synthesis on {topic}",
+  prompt: <template below>,
+  subagent_type: "general-purpose"
+)
+```
+
+### Prompt Template
+
+```
+You are an independent evaluator. You did NOT generate the synthesis below. Your job is to assess its quality against explicit success criteria.
+
+## Success Criteria (from Step 1)
+expected_output_type: {expected_output_type}
+must_answer: {must_answer_items}
+must_include: {must_include_items}
+
+## Synthesis to Evaluate
+{synthesis_draft}
+
+## Invariant Check Results
+{invariant_results_from_step_7b}
+
+## Your Task
+For EACH must_answer item:
+1. Is it addressed in the synthesis? (YES/NO)
+2. Is the answer sourced? (YES/NO/PARTIALLY)
+3. Is the source credible (T1-T2)? (YES/NO/MIXED)
+
+For EACH must_include item:
+1. Is it present? (YES/NO)
+2. Is it accurate and useful? (YES/NO)
+
+## Output Format (max 1,500 tokens)
+
+### Per-Item Verdict
+[For each must_answer and must_include: item | verdict | source quality]
+
+### Gaps Identified
+[Specific gaps that need filling. Format: gap_description | target_agent | target_query]
+
+### Recommendation
+- **PASS** — synthesis meets criteria, proceed to output
+- **REFINE** — synthesis has addressable gaps, proceed to Step 8 with listed targets
+
+### Overall Assessment
+[1-3 sentences: quality, completeness, confidence level recommendation]
+
+## Output Budget
+Return at most 1,500 tokens.
+
+## Task Boundaries
+- Do NOT search the web for new evidence.
+- Do NOT modify the synthesis.
+- Evaluate ONLY against the criteria provided.
+- Be honest — a REFINE verdict is more valuable than a false PASS.
+```
+
+---
+
+## Step 8: Refinement Prompts (Anti-Sycophancy Protocol)
+
+Targeted gap-filling. Narrower than original prompts — one specific gap per agent.
+
+**Critical: Anti-sycophancy ordering:**
+1. First, send the sources and quality rubric — NOT the current draft
+2. Ask the agent to evaluate independently what a complete answer looks like
+3. Only then, provide the current draft for targeted revision
+
+**Anonymization:** In the "Already Known" section, present claims WITHOUT source URLs first. The agent evaluates on substance before knowing source authority. This prevents authority bias where T1 sources are automatically accepted regardless of claim quality.
+
+### agent-websearch refinement
+
+```
+Agent(
+  description: "Refine: {gap_short}",
+  prompt: "A prior research pass on '{user_question}' identified a gap that needs filling.
+
+## Quality Rubric
+The answer must address: {must_answer_items_for_this_gap}
+It must include: {must_include_items_for_this_gap}
+
+## Gap to Fill
+{gap_description}
+
+## Already Known (claims only — sources withheld to prevent authority bias)
+These claims were established: {established_claims_list_without_urls}
+
+## Task
+Search specifically for: {target_query}
+Do NOT repeat broad research. Focus narrowly on filling this gap.
+Return: Key Findings, Sources, Contradictions Detected.
+
+## Output Budget
+Return at most 1,500 tokens.",
+  subagent_type: "agent-websearch"
+)
+```
+
+### agent-explore refinement
+
+```
+Agent(
+  description: "Refine: {gap_short}",
+  prompt: "A prior codebase exploration on '{user_question}' missed a specific area.
+
+## Gap to Fill
 {gap_description}
 
 ## Task
 Look specifically for: {target_query}
-Focus your exploration narrowly on this gap. Return findings with file:line references.",
+Focus narrowly. Return findings with file:line references.
+
+## Output Budget
+Return at most 1,500 tokens.",
   subagent_type: "agent-explore"
 )
 ```
 
-### Refinement: agent-docs
+### docs refinement (ctx7 CLI)
 
 ```
 Agent(
-  description: "Refine: {gap_description_short}",
-  prompt: "A prior documentation lookup on '{user_question}' missed the following:
+  description: "Refine: {gap_short}",
+  prompt: "A prior documentation lookup on '{user_question}' missed a specific detail.
 
-## Gap
+## Gap to Fill
 {gap_description}
 
 ## Task
 Look up specifically: {target_query}
-Use remaining Context7 calls to fill this gap. Return findings with sources.",
+Use remaining ctx7 CLI calls (bunx ctx7@latest docs {library_id} '{target_query}').
+Do NOT modify any files. Return findings with ctx7 library IDs.
+
+## Output Budget
+Return at most 1,500 tokens.",
   subagent_type: "agent-docs"
 )
 ```
-
----
-
-## Parallel Spawning
-
-When both Step 3 and Step 4 are active, spawn them in a SINGLE message with TWO Agent tool calls:
-
-```
-[Message with two tool calls]:
-
-Agent(
-  description: "Explore codebase for {topic}",
-  prompt: <step 3 prompt>,
-  subagent_type: "agent-explore"
-)
-
-Agent(
-  description: "Fetch docs for {library}",
-  prompt: <step 4 prompt>,
-  subagent_type: "agent-docs"
-)
-```
-
-This ensures true parallel execution. Both agents work simultaneously and the orchestrator waits for both to complete before proceeding to Step 5.
-
-If only one step is applicable (e.g., codebase exists but no libraries identified), spawn only that one.
-
-Similarly, during refinement (Step 7), if multiple gaps target different agents, spawn all needed refinement agents in a SINGLE message for parallel execution.
-
----
-
-## Orchestrator Responsibilities
-
-The orchestrator (main Claude session) handles:
-
-1. **Step 0 — CLASSIFY**: Assess query complexity, decompose if complex.
-2. **Step 1 — CACHE CHECK**: Read memory for prior research.
-3. **Spawn Step 2** — wait for completion.
-4. **Process Step 2 output** — extract findings, libraries, contradictions, create compressed summary.
-5. **Detect codebase** — parallel Glob for manifest files.
-6. **Extract library list** — merge Step 2 libraries + manifest dependencies.
-7. **Decide which steps to run** — based on codebase detection and library extraction.
-8. **Spawn Steps 3 and/or 4** — in parallel when both applicable.
-9. **Wait for all active agents** — collect outputs.
-10. **Step 5 — SYNTHESIZE** — combine all outputs with conflict resolution, deduplication, grounding, contradiction surfacing, and confidence scoring.
-11. **Step 6 — VERIFY** — score completeness, detect contradictions, identify gaps.
-12. **Step 7 — REFINE** (conditional) — spawn targeted agents for gaps, merge results.
-13. **Step 8 — PERSIST + OUTPUT** — write to memory if novel, deliver formatted response.
-
-The orchestrator NEVER duplicates agent work. It does not search the web, explore the codebase, or query Context7 itself. It only classifies, orchestrates, synthesizes, verifies, and formats.

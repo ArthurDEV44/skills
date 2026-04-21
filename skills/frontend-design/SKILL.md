@@ -2,13 +2,11 @@
 model: opus
 name: frontend-design
 description: >
-  Create distinctive, production-grade frontend interfaces with the intentionality of a senior human
-  web designer. Rejects generic AI aesthetics: no gratuitous animations, no neon glow, no purple
-  gradients, no hover effects on every element, no cookie-cutter SaaS layouts. Produces design that
-  feels considered, editorial, and human-crafted. Uses /meta-code pipeline to research current design
-  trends before implementation. Use when the user asks to build web components, pages, landing pages,
-  dashboards, or applications and wants high design quality. Also triggers on: "design this", "make
-  it look good", "UI for", "frontend for", "build a page", "create a component", "redesign",
+  Creates distinctive, production-grade frontend interfaces with the intentionality of a senior
+  human web designer. Rejects generic AI aesthetics (gratuitous animations, neon glow, purple
+  gradients, cookie-cutter SaaS layouts) in favor of considered, editorial, human-crafted design.
+  Researches current design trends before implementation. Triggers on: "design this", "make it
+  look good", "UI for", "frontend for", "build a page", "create a component", "redesign",
   "improve the design", "make it beautiful", "modern UI", "clean design".
 argument-hint: "[component, page, or feature to design]"
 ---
@@ -18,103 +16,106 @@ argument-hint: "[component, page, or feature to design]"
 ## Design Identity
 
 Draw inspiration from print magazines, architecture, film posters, Japanese packaging, Swiss
-typography, and Scandinavian product design — NOT from other websites. Think about composition,
-tension, rhythm, and negative space the way a photographer thinks about framing.
+typography, and Scandinavian product design — not from other websites.
 
-Every choice — font size, color, spacing, alignment — must be made deliberately.
-Nothing should be there "because it's the default."
+**North star studios** (study their work mentally before every design):
+Exo Ape, Immersive Garden, Zajno, Locomotive.
 
-**North star references** (study these studios' work mentally before every design):
-- Exo Ape — Interactive minimalism, 2-color palettes, content IS the interface
-- Immersive Garden — Luxury brand world-building, cinematic pacing
-- Zajno — Rule-breaking animation, bold color, interactive storytelling
-- Locomotive — Scroll-driven narrative, editorial typography, spatial rhythm
+**What these studios actually do** (based on 15+ Awwwards SOTDs):
+1. Strip UI to the bare minimum so content IS the interface
+2. Two-color palettes — maximum contrast, minimum complexity
+3. Technology is invisible — motion never competes with content
+4. Every project has a concept, not just a layout
+5. Beauty serves purpose — emotionally rich aesthetics wrap strategic concepts
 
-## The Fundamental Problem You Solve
+**The mindset before every decision:**
+- "Am I choosing this because it's right, or because it's safe?"
+- "Would a designer at Exo Ape push further?"
+- "Does this look designed for THIS product, or like a template?"
 
-LLMs predict tokens from training data dominated by Tailwind defaults, shadcn/ui components,
-and the post-2019 "Linear aesthetic." Without explicit intervention, you will produce the
-statistical average of early-2020s web design: Inter font, indigo buttons, three-column feature
-grids, purple gradients, glassmorphism cards. This is not because these are good choices — it's
-because they are the MOST COMMON choices in training data.
+## The Problem You Solve
 
-**Your job is to systematically break away from this convergence** by:
-1. Researching real award-winning work before designing
-2. Injecting a non-web design constraint that forces unexplored territory
-3. Using OKLCH colors, extreme type contrast, and intentional texture
-4. Self-auditing against a comprehensive AI-tell checklist
+LLMs produce the statistical average of web design training data: Inter font, indigo buttons,
+three-column feature grids, purple gradients, glassmorphism cards. Three compounding biases
+drive this convergence:
+1. **Tailwind/Indigo Cascade** — `bg-indigo-500` as demo default → copied everywhere → memorized
+2. **shadcn/ui Effect** — copy-paste model → exact patterns in hundreds of thousands of repos
+3. **Linear Aesthetic** — dark UI + `#5E6AD2` became the visual vocabulary for "serious SaaS"
+
+After blocking Layer 1 defaults, a Layer 2 emerges: Space Grotesk replaces Inter, teal replaces
+purple, bento grid replaces three-column. You must block both layers explicitly.
+
+Your job is to break away from this convergence by researching real work, injecting non-web
+constraints, and self-auditing against AI-tell checklists. The reference files contain the
+specific techniques — this file defines the workflow.
 
 ## Runtime Output Format
 
-Before each phase, print a progress header:
-
+Print a progress header before each phase:
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [Phase N/5] PHASE_NAME
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-Between major phases, print a thin separator: `───────────────────────────────`
-
 ## Workflow
 
-### Phase 0: Research — MANDATORY
+### Phase 0: Research
 
 Print: `[Phase 0/5] RESEARCH`
 
-**This phase is NOT optional.** Before designing anything, you MUST research current design trends
-and relevant inspiration. This is the single biggest difference between mediocre and exceptional
-AI design output.
+Before designing anything, research current design trends and relevant inspiration. This phase
+is what separates mediocre from exceptional AI design output — skipping it is the #1 cause of
+generic results.
 
-Launch an `agent-websearch` subagent with a structured research query. Use the template in
-`references/research-methodology.md` to construct the query based on:
-- The industry/product type the user is building
-- Current award-winning sites in that space
-- Typography and color trends for that specific vertical
-- Specific Framer templates, Awwwards winners, or creative agency work relevant to the brief
+Launch an `agent-websearch` subagent with a query built from `references/research-methodology.md`,
+tailored to the user's product type and industry.
 
-**Research extraction:** From the research results, extract and write down:
+**Extract from research results:**
 1. **3 specific reference sites** with what makes them distinctive
-2. **Typography tokens:** font names, weight ranges, size ratios seen in the best examples
-3. **Color tokens:** specific hex/OKLCH values from reference palettes
-4. **Layout techniques:** specific CSS patterns used by the references
-5. **One "constraint from outside web"** — a non-web design reference that could inform the project
-   (e.g., "the density of a Bloomberg terminal", "the calm of a Kinfolk magazine spread",
-   "the boldness of a Bauhaus poster", "the material warmth of Japanese ceramic packaging")
+2. **Typography tokens:** font names, weight ranges, size ratios
+3. **Color tokens:** OKLCH values from reference palettes
+4. **Layout techniques:** specific CSS patterns from references
+5. **One "constraint from outside web"** — a non-web design analogy
+   (e.g., "the calm of a Kinfolk magazine spread", "the boldness of a Bauhaus poster")
 
 Print a brief research summary:
 ```markdown
 ───────────────────────────────
-**Research Summary**
 **References:** {3 sites/brands studied}
 **Non-web constraint:** {the chosen design analogy}
 **Key insight:** {one specific technique borrowed from research}
 ───────────────────────────────
 ```
 
-### Phase 1: Understand Before Designing
+### Phase 0.5: Figma Context (optional)
+
+If the user provides a Figma URL or mentions a Figma design:
+1. Call `mcp__claude_ai_Figma__get_design_context` with the extracted fileKey and nodeId
+2. Extract design tokens (colors, fonts, spacing) from the Figma output
+3. Use these tokens as CONSTRAINTS for Phase 2 — they override research-derived tokens
+4. If Code Connect mappings exist, use mapped codebase components instead of generating new ones
+
+The Figma MCP output is React+Tailwind — treat it as a reference, not final code. Always adapt
+to the project's existing stack and conventions.
+
+### Phase 1: Understand
 
 Print: `[Phase 1/5] UNDERSTAND`
 
-Before writing ANY code, gather context:
+Before writing code, gather context:
 
-1. **Read the codebase** — Look for existing design tokens, color variables, font imports,
-   spacing systems, component patterns. Respect what exists.
-2. **Understand the product** — What does the product do? Who uses it? What emotion should the
-   interface convey? A fintech dashboard feels different from a creative portfolio.
-3. **Identify constraints** — What framework? What component library? What CSS approach?
-   Design within real constraints, not in a vacuum.
-4. **Choose the product archetype** — Consult `references/industry-archetypes.md` to select
-   the right design approach for this product category.
+1. **Read the codebase** — existing design tokens, color variables, fonts, spacing, components
+2. **Understand the product** — what it does, who uses it, what emotion it should convey
+3. **Identify constraints** — framework, component library, CSS approach
+4. **Choose the product archetype** — consult `references/industry-archetypes.md`
 
-Print a brief context summary:
+Print a context summary:
 ```markdown
 ───────────────────────────────
 **Stack:** {framework} | **CSS:** {approach} | **Components:** {library or custom}
-**Existing design tokens:** {found / none}
-**Target:** {what we're building}
-**Archetype:** {industry/product type from archetypes reference}
-**Non-web constraint:** {the design analogy chosen in Phase 0}
+**Existing tokens:** {found / none} | **Archetype:** {product type}
+**Non-web constraint:** {design analogy from Phase 0}
 ───────────────────────────────
 ```
 
@@ -122,35 +123,20 @@ Print a brief context summary:
 
 Print: `[Phase 2/5] DESIGN DIRECTION`
 
-Before implementing, describe your design direction in plain language the user can understand.
-Consult `references/question-templates.md` for how to communicate with the user.
+Before implementing, describe the design direction in plain language. Consult
+`references/question-templates.md` — explain every term using visual analogies, never jargon.
 
-**2a. Choose your design tokens FIRST:**
-
-Before proposing the visual direction, decide on concrete values:
+**2a. Choose design tokens first** (consult typography.md, color-system.md):
 
 ```
-Typography:
-  Display: {font name} at weight {N} — why this font
-  Body: {font name} at weight {N} — why this font
-  Scale ratio: {1.25 / 1.333 / 1.618}
-  Display tracking: {-0.04em to -0.02em}
-
-Color (OKLCH):
-  Background: oklch({L}% {C} {H}) — {mood description}
-  Surface: oklch({L}% {C} {H})
-  Text: oklch({L}% {C} {H})
-  Text muted: oklch({L}% {C} {H})
-  Accent: oklch({L}% {C} {H}) — {why this accent}
-  Border: oklch({L}% {C} {H})
-
-Spacing: 8px grid, section padding {N}px
-Border-radius: {value}px — {why: enterprise=2px, consumer=12px, brutalist=0px}
-Shadow style: {diffuse / hard-offset / none}
-Texture: {grain overlay / noise / clean}
+Typography:  Display: {font} at {weight} | Body: {font} at {weight} | Scale: {ratio}
+Color:       Background: oklch(...) | Text: oklch(...) | Accent: oklch(...) — {why}
+Spacing:     8px grid, section padding {N}px
+Radius:      {value}px — {why: enterprise=2px, consumer=12px, brutalist=0px}
+Texture:     {grain / noise / clean}
 ```
 
-**2b. Present the direction** using this template:
+**2b. Present the direction:**
 
 ```markdown
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -158,32 +144,27 @@ DESIGN DIRECTION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ### The Feeling
-{Visual analogy — "This should feel like..." with a concrete, non-web reference}
-{Reference the non-web constraint chosen in Phase 0}
+{Visual analogy — "This should feel like..." referencing the non-web constraint}
 
 ### Inspiration Sources
-{Name 2-3 specific sites/brands from Phase 0 research + what you're borrowing from each}
+{2-3 specific sites/brands from Phase 0 + what you're borrowing}
 
 ### Key Choices
-
 | | |
 |---|---|
-| **Typography** | {font names + what personality they bring — in plain language} |
-| **Color palette** | {dominant color + accent — described as mood AND shown as color values} |
-| **Spacing** | {tight/airy/generous + real-world analogy} |
-| **Layout** | {approach described visually + which editorial pattern from references} |
+| **Typography** | {fonts + personality — plain language} |
+| **Color** | {mood + OKLCH values} |
+| **Layout** | {approach + editorial pattern} |
 | **Texture** | {grain/noise/clean — why} |
-| **Border style** | {radius + shadow approach — what signal it sends} |
 
 ### What I Will NOT Do
-- {specific default avoided — name the exact pattern, e.g., "No three-column feature grid"}
-- {specific shadcn default overridden, e.g., "No rounded-md everywhere"}
-- {specific AI tell avoided}
+- {specific AI default avoided}
+- {specific shadcn default overridden}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-**2c. Interactive approval — Use AskUserQuestion:**
+**2c. Gate — Use AskUserQuestion:**
 
 ```json
 {
@@ -191,108 +172,83 @@ DESIGN DIRECTION
     "question": "Does this design direction match what you have in mind?",
     "header": "Direction",
     "options": [
-      { "label": "Yes, build it", "description": "Proceed with this direction — implement the design" },
-      { "label": "Adjust", "description": "The direction is close but I want to tweak some choices" },
-      { "label": "Different direction", "description": "This isn't what I had in mind — let me describe what I want" }
+      { "label": "Yes, build it", "description": "Proceed with implementation" },
+      { "label": "Adjust", "description": "Close but I want to tweak some choices" },
+      { "label": "Different direction", "description": "Not what I had in mind" }
     ]
   }]
 }
 ```
 
-- If user selects **"Yes, build it"** → proceed to Phase 3.
-- If user selects **"Adjust"** → ask which specific choices to change, revise, re-present.
-- If user selects **"Different direction"** → ask the user to describe what they want using
-  "Imagine..." framing from `references/question-templates.md`, then build a new direction.
-
-**GATE:** User explicitly approves the design direction via AskUserQuestion.
+Do not proceed to Phase 3 until the user approves.
 
 ### Phase 3: Implement
 
 Print: `[Phase 3/5] IMPLEMENTATION`
 
-Build the interface following the design system in the reference files:
-- Consult `references/typography.md` for type scale and font selection
-- Consult `references/color-system.md` for OKLCH palette construction
-- Consult `references/layout-patterns.md` for spacing grid and editorial composition
-- Consult `references/texture-and-depth.md` for grain, noise, and material depth
-- Consult `references/component-distinctiveness.md` for breaking away from shadcn defaults
-- Consult `references/anti-patterns.md` to verify you are not falling into AI design traps
+Before writing code, review the closest example in `references/examples.md` for the component
+type you're building. Then build using the reference files as your design system:
+- `references/examples.md` — annotated gold standard snippets (review first)
+- `references/typography.md` — type scale, font selection, extreme contrast
+- `references/color-system.md` — OKLCH palette, design token architecture
+- `references/layout-patterns.md` — spacing grid, editorial composition, responsive
+- `references/texture-and-depth.md` — grain, noise, material depth (load if direction specifies texture)
+- `references/component-distinctiveness.md` — breaking shadcn defaults
+- `references/performance.md` — font loading, LCP, CLS prevention
+- `references/anti-patterns.md` — AI design tells to avoid
+- `references/animation-policy.md` — load only if user requested animation
 
-**Implementation checklist (verify each during build):**
+**Implementation checklist:**
+1. Typography installed (preconnect, needed weights only, font-display:swap)
+2. OKLCH colors as CSS custom properties (not Tailwind palette names)
+3. 8px spacing grid, generous section padding (96px+ desktop)
+4. At least one element breaks the grid (asymmetric, offset, bleed-to-edge)
+5. Texture applied if specified in direction
+6. Border-radius intentional and varied by element type
+7. Shadows graduated by elevation level
+8. Body text at `max-width: 65ch`
+9. Display type with negative tracking (`letter-spacing: -0.04em`)
+10. Semantic HTML (nav, main, section, headings in order)
+11. WCAG AA contrast ratios met
+12. Focus states visible on interactive elements
 
-1. **Typography installed correctly** — Google Fonts preconnect, only needed weights loaded
-2. **OKLCH colors defined as CSS custom properties** — not inline Tailwind palette names
-3. **Spacing uses the 8px grid** — no arbitrary values
-4. **At least one element breaks the grid** — asymmetric hero, offset content, bleed-to-edge
-5. **Texture applied** — grain/noise overlay if specified in direction
-6. **Border-radius is intentional** — not uniform `rounded-md` everywhere
-7. **Shadows are graduated** — different depths for different elevation levels
-8. **Body text has `max-width: 65ch`** — never full container width
-9. **Display type has negative tracking** — `letter-spacing: -0.04em` at hero sizes
-10. **Section padding is generous** — minimum 96px vertical on desktop
-
-When building multiple components or sections, print progress:
-```
-── Building: {component/section name} ──
-```
-
-After each major piece is complete, print:
-```
-   {component/section name} — done
-```
+Print progress: `── Building: {name} ──` / `   {name} — done`
 
 ### Phase 4: Self-Review
 
 Print: `[Phase 4/5] REVIEW`
 
-**4a. Anti-pattern audit:**
+**4a. Anti-pattern audit** — Run the Self-Review Checklist in `references/anti-patterns.md`.
+Fix every issue found before proceeding.
 
-Run through the COMPLETE anti-pattern checklist in `references/anti-patterns.md`.
-Answer each of these questions honestly:
+**4b. Accessibility verification** — Run the Phase 4 Checklist in `references/accessibility.md`.
+Fix every issue found before proceeding.
 
-1. Could a senior designer at Exo Ape or Zajno tell this was AI-generated? What gives it away?
-2. Is ANY element using shadcn/ui defaults without intentional customization?
-3. Does the typography have extreme contrast (3x+ size jumps, 400+ weight difference)?
-4. Are colors specified in OKLCH with warm/cool tinting (not pure grey)?
-5. Is there texture/grain where specified?
-6. Does at least one layout element break the expected grid?
-7. Is there intentional whitespace asymmetry (not uniform padding everywhere)?
-8. Could you remove ANY element without hurting the design? If yes, remove it.
-9. Does this design have a POINT OF VIEW or is it trying to please everyone?
-10. Does the border-radius vary intentionally (not uniform `rounded-md`)?
+**4c. Three-Second Test** — Run the scored Three-Second Test in `references/anti-patterns.md`.
+Score must be 3/5 or higher. If below, add one bold choice and re-score.
 
-**4b. The "Three-Second Test":**
-Look at the design as a whole. In three seconds, can you identify:
-- What makes this design DISTINCTIVE (not just "clean")?
-- What is the ONE unusual choice that a human designer would have made?
-- Does anything feel "safe" in a way that makes it forgettable?
+**4d. Intent check** — What hypothesis does this design test? What does it communicate about
+the product that a generic template would not?
 
-If the design passes as "clean but generic," it has FAILED. Go back and add one bold choice:
-a larger headline, a surprising accent color, an asymmetric layout break, a grain texture.
-
-**4c. Fix before presenting:**
-If ANY anti-pattern is found or the Three-Second Test fails, fix it BEFORE presenting to the user.
-
-**4d. Present the result summary:**
+**4e. Fix before presenting.** Then show the result summary:
 
 ```markdown
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 DESIGN COMPLETE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Built:** {list of components/sections created}
-**Files changed:** {N} files
+**Built:** {components/sections}  |  **Files changed:** {N}
 
-### Design Choices Applied
-- **Typography:** {fonts used, weight contrast, scale ratio}
+### Design Choices
+- **Typography:** {fonts, contrast, scale}
 - **Colors:** {OKLCH palette summary}
-- **Layout:** {editorial approach used}
-- **Texture:** {grain/noise/clean}
-- **Distinctive choice:** {the one bold decision that makes this not-generic}
+- **Layout:** {editorial approach}
+- **Distinctive choice:** {the one bold decision}
 
-### Anti-Pattern Check
-- {N} potential AI tells checked — {all clear / N fixed}
-- Three-Second Test: {passed / fixed — what was changed}
+### Quality Checks
+- Anti-pattern audit: {N checked — all clear / N fixed}
+- Accessibility: {contrast OK / heading hierarchy OK / focus states OK}
+- Three-Second Test: {score}/5 — {passed / fixed}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
@@ -301,177 +257,67 @@ DESIGN COMPLETE
 
 Print: `[Phase 5/5] USER REVIEW`
 
-**Use AskUserQuestion:**
-
 ```json
 {
   "questions": [{
     "question": "The design is complete. How would you like to proceed?",
     "header": "Review",
     "options": [
-      { "label": "Looks great", "description": "I'm happy with the result — we're done" },
-      { "label": "Small tweaks", "description": "It's close but I want to adjust specific details (colors, spacing, text)" },
-      { "label": "Major revision", "description": "This needs significant changes — let's rethink the approach" }
+      { "label": "Looks great", "description": "Happy with the result" },
+      { "label": "Small tweaks", "description": "Adjust specific details" },
+      { "label": "Major revision", "description": "Rethink the approach" }
     ]
   }]
 }
 ```
 
-- If user selects **"Looks great"** → print final summary and STOP.
-- If user selects **"Small tweaks"** → ask which elements to adjust, apply changes,
-  re-run anti-pattern check, re-present with AskUserQuestion.
-- If user selects **"Major revision"** → ask what's not working, loop back to Phase 2.
-
-**GATE:** User explicitly confirms satisfaction via AskUserQuestion.
-
-## Core Design Rules
-
-### No Animation by Default
-
-Do NOT add any animation unless the user explicitly requests it.
-No framer-motion. No entrance animations. No scroll-triggered reveals.
-No hover scale effects. No button press animations. No staggered list animations.
-No loading skeletons that pulse. No animated gradients.
-
-CSS `transition` on interactive elements (buttons, links, inputs) for state changes (hover, focus,
-active) is acceptable ONLY if subtle (150-200ms, opacity or color change only, no transform).
-
-If the user asks for animation, consult `references/animation-policy.md`.
-
-### No Decoration Without Purpose
-
-Every visual element must earn its place. Ask: "What does this communicate?"
-- A shadow communicates elevation → acceptable if intentional and graduated
-- A gradient communicates... what exactly? If you can't answer, don't use it
-- A border radius communicates friendliness → but not when applied uniformly to everything
-- An icon communicates function → but not when it's purely decorative filler
-
-### Typography Is the Design
-
-The typeface IS the personality. The type scale IS the hierarchy. The line-height IS the breathing
-room. Get typography right and the rest follows. Get it wrong and nothing else matters.
-
-**Extreme contrast is mandatory:**
-- Weight: 200-300 body vs 800-900 headlines (not 400 vs 600)
-- Size: 3x+ jump between heading and body (not timid 1.5x)
-- Tracking: -0.04em at display sizes, 0 at body, +0.08em at caption/label sizes
-- Line-height: 0.95-1.1 for display, 1.6 for body
-
-Read `references/typography.md` before choosing any font.
-
-### Color Is an OKLCH Decision
-
-Use `oklch()` for ALL color definitions. OKLCH produces perceptually uniform scales where
-lightness changes look consistent. Hex and HSL produce muddy mid-tones.
-
-One dominant palette. One accent color that means something. Neutrals that have warmth or
-coolness — never pure grey (`oklch(50% 0 0)` is banned; always add chroma and hue).
-
-Read `references/color-system.md` before choosing any color.
-
-### Texture Separates Human from AI
-
-AI output is perfectly flat. Human-designed sites have depth through:
-- Grain/noise overlays at 3-5% opacity
-- Subtle background gradients (tonal, not decorative)
-- Material-inspired surfaces (not glassmorphism)
-
-Consult `references/texture-and-depth.md` for implementation.
-
-### Layout Is Composition
-
-Stop stacking sections in a predictable sequence. Think about what the user sees FIRST, what
-they see SECOND, and how their eye travels. Use asymmetry, scale contrast, and negative space
-to create visual rhythm.
-
-Read `references/layout-patterns.md` before structuring any page.
-
-### Components Must Not Look Like Defaults
-
-If you're using shadcn/ui or any component library, you MUST customize:
-- Border-radius (choose based on product tone, not `rounded-md` for everything)
-- Shadow depth (graduated system: sm/md/lg with different offset and blur)
-- Button styles (not the default primary/secondary pattern)
-- Card styles (not uniform rounded cards with identical shadows)
-
-Consult `references/component-distinctiveness.md` for specific overrides.
-
-## How to Ask the User Questions
-
-When you need the user's input on a design direction, you MUST follow the rules
-in `references/question-templates.md`. The key principle: explain every term, every option,
-every trade-off in language a non-designer can instantly understand. Use visual analogies.
-Never use jargon without explaining it.
-
-## Hard Rules
-
-1. ALWAYS run Phase 0 (Research) — it is MANDATORY, not optional.
-2. NEVER implement before the user approves the design direction via AskUserQuestion in Phase 2.
-3. NEVER use plain text questions like "Does this look good?" — ALWAYS use AskUserQuestion.
-4. Print `[Phase N/5]` progress headers before each phase — NEVER skip progress indicators.
-5. ALWAYS run the anti-pattern check AND the Three-Second Test in Phase 4 before presenting.
-6. No animation unless the user explicitly requests it.
-7. Every visual choice must be intentional — if you can't explain WHY, change it.
-8. ALWAYS use OKLCH for color definitions, not hex or HSL.
-9. ALWAYS define colors as CSS custom properties, not inline Tailwind palette names.
-10. If Phase 4 reveals AI design tells, fix them BEFORE presenting to the user.
-11. "Major revision" in Phase 5 loops back to Phase 2 — it does NOT restart from Phase 0.
-12. The "non-web constraint" chosen in Phase 0 MUST visibly influence the final design.
-
-## DO NOT
-
-- Start coding before the user approves the design direction in Phase 2.
-- Skip Phase 0 research — this is the #1 cause of generic output.
-- Use generic AI aesthetics: neon glow, purple gradients, gratuitous animations.
-- Use Tailwind palette names directly (`bg-indigo-500`) — always define custom properties.
-- Use `rounded-md` as default border-radius — choose intentionally per product tone.
-- Leave pure greys — always tint with warmth or coolness using OKLCH chroma.
-- Skip the Three-Second Test in Phase 4.
-- Ask the user about implementation details — only ask about visual/feeling decisions.
-- Present design options using abstract jargon — always use visual analogies.
-- Add animation of any kind unless explicitly requested by the user.
-- Use the same shadow depth for all elements.
-- Leave body text at full container width — always constrain with `max-width: 65ch`.
+- **Looks great** → done.
+- **Small tweaks** → apply changes, re-run Phase 4 checks, re-present.
+- **Major revision** → loop back to Phase 2 (not Phase 0).
 
 ## References
 
+- [Examples](references/examples.md) — annotated gold standard snippets for few-shot guidance
 - [Research Methodology](references/research-methodology.md) — structured queries for Phase 0
 - [Industry Archetypes](references/industry-archetypes.md) — design approach by product type
-- [Design Philosophy](references/design-philosophy.md) — the deeper "why" behind every rule
-- [Typography System](references/typography.md) — font selection, type scale, OKLCH, extreme contrast
-- [Color System](references/color-system.md) — OKLCH palette construction, warm neutrals
-- [Layout Patterns](references/layout-patterns.md) — editorial composition, magazine techniques
+- [Typography](references/typography.md) — font selection, type scale, extreme contrast
+- [Color System](references/color-system.md) — OKLCH palette, design token architecture
+- [Layout Patterns](references/layout-patterns.md) — editorial composition, responsive, spacing
 - [Texture & Depth](references/texture-and-depth.md) — grain, noise, material surfaces
 - [Component Distinctiveness](references/component-distinctiveness.md) — breaking shadcn defaults
 - [Anti-Patterns](references/anti-patterns.md) — complete catalog of AI design tells
+- [Accessibility](references/accessibility.md) — WCAG 2.2 AA compliance checklist
+- [Performance](references/performance.md) — font loading, Core Web Vitals, image optimization
 - [Animation Policy](references/animation-policy.md) — when and how animation is acceptable
-- [Question Templates](references/question-templates.md) — how to communicate in plain language
+- [Question Templates](references/question-templates.md) — communicating in plain language
 
 ## Done When
 
-- [ ] Phase 0 (Research) completed with 3 reference sites and non-web constraint identified
+- [ ] Phase 0 research completed — 3 references + non-web constraint identified
 - [ ] Design direction approved by user via AskUserQuestion (Phase 2)
-- [ ] Implementation complete with all design tokens applied
-- [ ] Anti-pattern audit passed (Phase 4) — zero AI design tells remaining
-- [ ] Three-Second Test passed — design has a distinctive, non-generic identity
+- [ ] Implementation complete with design tokens applied
+- [ ] Anti-pattern audit passed — zero AI tells remaining
+- [ ] Accessibility verified — WCAG AA contrast, headings, focus, semantics
+- [ ] Three-Second Test scored 3/5 or higher — design has a distinctive identity
 - [ ] User confirms satisfaction via AskUserQuestion (Phase 5)
 
-## Constraints (Three-Tier)
+## Constraints
 
 ### ALWAYS
-- Run Phase 0 (Research) — it is mandatory, not optional
-- Use OKLCH for all color definitions — never hex or HSL
-- Define colors as CSS custom properties — never inline Tailwind palette names
-- Run anti-pattern check AND Three-Second Test before presenting to user
-- Print progress headers before each phase
+- Run Phase 0 research before designing — it prevents generic output
+- Use OKLCH for all colors — perceptually uniform, no muddy mid-tones
+- Define colors as CSS custom properties — not inline Tailwind palette names
+- Run anti-pattern + accessibility + Three-Second Test before presenting
+- Use AskUserQuestion for user decisions — not plain text questions
+- Print `[Phase N/5]` progress headers
 
 ### ASK FIRST
-- Implement design (require user approval of direction via AskUserQuestion in Phase 2)
-- Add animation of any kind (only if user explicitly requests it)
+- Implement design — require user approval in Phase 2
+- Add animation — only when the user explicitly requests it
 
 ### NEVER
-- Start coding before user approves design direction in Phase 2
+- Code before the user approves the direction in Phase 2
 - Use generic AI aesthetics: neon glow, purple gradients, gratuitous animations
-- Use `rounded-md` as default border-radius — choose intentionally per product tone
-- Leave pure greys — always tint with warmth or coolness using OKLCH chroma
-- Add animation unless explicitly requested by the user
+- Use `rounded-md` uniformly — choose radius per product tone and element type
+- Leave pure greys — always tint with OKLCH chroma
+- Skip the Three-Second Test

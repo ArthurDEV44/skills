@@ -1,43 +1,40 @@
 # Prompt Engineering Techniques Catalog
 
-Consolidated best practices from Anthropic, OpenAI, and Google research, optimized for Claude Code prompt generation.
+Techniques for generating high-quality Claude Code prompts. Each technique includes a pattern you can embed directly in generated prompts.
 
 ## 1. Clarity and Directness
 
-The single most impactful technique. Claude responds best to clear, explicit instructions.
+Be specific about what to build. Treat the prompt as a specification — no implied knowledge, no ambiguity.
 
 **Principles:**
-- Be specific about desired output format and constraints
 - Use numbered steps when order matters
-- State what you WANT, not what you DON'T want (then add anti-patterns separately)
-- Think of the prompt as a spec for a new employee: no implied knowledge
+- State what you want first, then complement with pitfalls to avoid
+- Every instruction should be concrete enough to verify
 
 **Pattern:**
 ```
-WEAK: "Create a good dashboard"
-STRONG: "Create an analytics dashboard with: (1) a sidebar navigation with 5 sections, (2) a main content area with a 3-column card grid showing KPIs, (3) a line chart for revenue over time using Recharts, (4) a data table with sorting and pagination for recent transactions"
+Weak: "Create a good dashboard"
+Strong: "Create an analytics dashboard with: (1) a sidebar navigation with 5 sections, (2) a main content area with a 3-column card grid showing KPIs, (3) a line chart for revenue over time using Recharts, (4) a data table with sorting and pagination for recent transactions"
 ```
-
-**Claude Code specific:** Add modifiers like "Include as many relevant features and interactions as possible. Go beyond the basics to create a fully-featured implementation." to unlock Claude's full capability.
 
 ## 2. XML Tag Structuring
 
-XML tags eliminate ambiguity when prompts mix instructions, context, examples, and data.
+XML tags organize prompts into unambiguous sections when mixing instructions, context, and examples. Use consistently — do not mix XML and Markdown delimiters in the same prompt.
 
-**Essential tags for Claude Code prompts:**
-- `<context>` — Background info, project state, existing codebase description
-- `<requirements>` — What must be built (functional requirements)
-- `<stack>` — Technologies, frameworks, libraries, versions
-- `<constraints>` — Rules, limitations, performance targets
+**Standard tag vocabulary:**
+- `<context>` — Background info, project state, existing codebase
+- `<requirements>` — Functional requirements (numbered)
+- `<stack>` — Technologies, frameworks, libraries with versions
+- `<constraints>` — Rules and limitations with motivations
+- `<verification>` — Concrete checks to validate the output
 - `<examples>` / `<example>` — Demonstration of desired output
-- `<anti-patterns>` — What to explicitly avoid
-- `<acceptance-criteria>` — Definition of done
+- `<plan>` — Architecture planning instruction
 
 **Pattern:**
 ```xml
 <context>
-This is an existing Next.js 15 app with App Router, Tailwind CSS v4, and Clerk auth already configured.
-The project uses TypeScript strict mode and Drizzle ORM with PostgreSQL on Neon.
+Existing Next.js 15 app with App Router, Tailwind CSS v4, and Clerk auth.
+TypeScript strict mode, Drizzle ORM with PostgreSQL on Neon.
 </context>
 
 <requirements>
@@ -48,145 +45,179 @@ The project uses TypeScript strict mode and Drizzle ORM with PostgreSQL on Neon.
 </requirements>
 
 <constraints>
-- Use existing UI components from the project's /components/ui directory
-- All forms must use server actions, not API routes
-- Must be fully responsive (mobile-first)
-- No client-side state management libraries — use React Server Components where possible
+- Use existing UI components from /components/ui — avoids style fragmentation
+- Use server actions for mutations — enables progressive enhancement and type-safe form handling
+- Mobile-first responsive — 60%+ of users are on mobile
 </constraints>
+
+<verification>
+- `next build` succeeds with zero errors
+- All forms submit and persist data correctly
+- Pages render correctly at 375px, 768px, 1440px
+- Account deletion requires confirmation and cascades properly
+</verification>
 ```
 
-## 3. Role Assignment (Persona)
+## 3. Role Assignment
 
-Setting a specific expert persona focuses Claude's behavior and activates domain-specific knowledge.
+A single sentence focusing Claude's expertise is sufficient. Elaborate multi-paragraph personas add noise without improving output.
 
 **Pattern:**
 ```
-You are a senior full-stack engineer specializing in Next.js App Router, TypeScript, and Tailwind CSS. You write production-ready, type-safe code with proper error handling. You follow the principle of least surprise and prefer simplicity over abstraction.
+You are a senior full-stack engineer specializing in Next.js App Router, TypeScript, and Tailwind CSS.
 ```
 
-**Effective roles for Claude Code:**
+**Effective roles by domain:**
 - "Senior full-stack engineer" — web apps
 - "Staff backend engineer" — APIs, databases, system design
 - "Principal frontend engineer" — UI/UX, design systems
-- "DevOps/SRE engineer" — infrastructure, CI/CD, deployment
-- "Security engineer" — auth, data protection, OWASP compliance
+- "DevOps/SRE engineer" — infrastructure, CI/CD
+- "Security engineer" — auth, data protection
 
 ## 4. Few-Shot Examples
 
-Examples are the most reliable way to steer output format, tone, and structure.
+Examples are the most reliable way to steer output format, tone, and structure. Include 1-2 examples by default when output format matters; use 3-5 for complex or subtle patterns.
+
+**When to include:**
+- Output format is specific (JSON schema, component API, file structure)
+- Tone/style matters (error messages, UI copy)
+- Behavior has subtle rules (validation logic, routing patterns)
 
 **Rules:**
-- 3-5 examples for best results
-- Make examples diverse (cover edge cases)
+- Formatting must be identical across all examples (whitespace, tags, delimiters)
+- Show the pattern, not just one case — cover at least one edge case
 - Wrap in `<examples>` / `<example>` tags
-- Show the PATTERN, not just one case
 
-**When to use in meta-prompts:**
-- When the output format is specific (JSON schema, component API, file structure)
-- When tone/style matters (error messages, UI copy, commit messages)
-- When the behavior has subtle rules (validation logic, routing patterns)
+## 5. Planning Before Code
 
-## 5. Chain of Thought (CoT)
-
-Encourage step-by-step reasoning for complex decisions.
+For complex builds, instruct Claude to plan the architecture before writing code. A good plan enables one-shot implementation.
 
 **Pattern:**
 ```
-Before implementing, think through the following:
-1. What is the data model? Define entities and relationships
-2. What are the page routes and their purposes?
-3. What components are needed and how do they compose?
-4. What are the edge cases and error states?
+Before writing any code, think through:
+1. The data model — entities, relationships, and constraints
+2. The page routes and their purposes
+3. The component hierarchy and how pieces compose
+4. Edge cases and error states
+
 Then implement based on your analysis.
 ```
 
-**Claude Code specific:** Claude 4.6 has adaptive thinking built in. For complex prompts, use phrases like "Think through the architecture before writing code" or "Plan the file structure first, then implement."
+**For Full-level prompts, use a `<plan>` tag:**
+```xml
+<plan>
+Before implementing, plan the architecture. Think through the data model, page routes, component hierarchy, and state management approach. Then build systematically.
+</plan>
+```
 
 ## 6. Task Decomposition
 
-Break complex projects into sequential phases.
+Break complex projects into sequential phases. Each phase produces a testable milestone.
 
 **Pattern:**
 ```
-Implement this in phases:
+Implement in phases:
 
 Phase 1 — Data Layer:
 - Define the database schema with Drizzle ORM
 - Create migration files
-- Set up seed data
+- Set up seed data with realistic content
 
-Phase 2 — API Layer:
+Phase 2 — Server Layer:
 - Implement server actions for CRUD operations
 - Add input validation with Zod
-- Handle errors with typed error responses
+- Handle errors with typed responses
 
 Phase 3 — UI Layer:
 - Build page layouts and components
 - Wire up forms to server actions
 - Add loading and error states
 
-Phase 4 — Polish:
-- Add animations and transitions
-- Implement responsive design
-- Run through accessibility checklist
+Phase 4 — Verification:
+- Run `next build` — fix all errors
+- Test responsive at 375px, 768px, 1440px
+- Check accessibility (ARIA labels, keyboard nav)
 ```
 
-## 7. Anti-Pattern Specification
+## 7. Positive Directives with Pitfall Complement
 
-Explicitly state what Claude should NOT do. This is critical for Claude Code, which can over-engineer.
+State what to do first. Then add a short list of specific pitfalls to avoid. This produces better generalization than pure negative constraints — Claude extrapolates better from motivations than from prohibition lists.
 
-**Essential anti-patterns to include:**
+**Pattern:**
 ```xml
-<anti-patterns>
-- DO NOT over-engineer: no abstractions for one-time operations
-- DO NOT add features that weren't requested
-- DO NOT use placeholder/dummy data — use realistic sample data
-- DO NOT create generic "AI-looking" UI (no purple gradients on white, no Inter font)
-- DO NOT add unnecessary error handling for impossible scenarios
-- DO NOT create helper utilities for single-use operations
-- DO NOT add comments to self-explanatory code
-- DO NOT create README or documentation files unless requested
-- DO NOT use deprecated APIs or patterns
-</anti-patterns>
+<constraints>
+- Keep components focused — each handles one concern
+- Use realistic sample data that fits the domain
+- Design a distinctive visual identity for this specific product
+- Use React Server Components by default, client components only for interactivity
+</constraints>
+
+Avoid these specific pitfalls:
+- Placeholder content ("Lorem ipsum", "Coming soon", generic user avatars)
+- Generic AI aesthetic (purple gradients, Inter/Roboto fonts, card-heavy layouts)
+- Abstractions for one-time operations
+- Features not explicitly requested
 ```
 
-## 8. Output Format Specification
+## 8. Verification Loop
 
-Define exactly what Claude should produce.
+The highest-leverage quality multiplier. Every prompt should include concrete checks Claude runs to validate its output. This creates a feedback loop that 2-3x the quality of the final result.
 
-**Pattern for file-based output:**
-```
-Create the following file structure:
-src/
-  app/
-    dashboard/
-      page.tsx        — Main dashboard with KPI cards and charts
-      layout.tsx      — Dashboard layout with sidebar nav
-      settings/
-        page.tsx      — User settings form
-    api/
-      webhooks/
-        stripe/
-          route.ts    — Stripe webhook handler
-  components/
-    ui/
-      data-table.tsx  — Reusable data table with sorting/filtering
-      chart.tsx       — Line chart wrapper component
-  lib/
-    db/
-      schema.ts       — Drizzle schema definitions
-      queries.ts      — Database query functions
+**Pattern for web apps:**
+```xml
+<verification>
+After implementing, verify:
+- `next build` (or equivalent) succeeds with zero errors and zero warnings
+- All pages render correctly at 375px, 768px, and 1440px
+- Interactive elements have hover/focus/active states
+- Forms submit correctly and show validation errors for invalid input
+- Empty states are handled for lists and tables with no data
+- Accessibility: proper ARIA labels, keyboard navigation works, color contrast passes
+</verification>
 ```
 
-## 9. Context Window Optimization
+**Pattern for APIs:**
+```xml
+<verification>
+- All endpoints return correct status codes (200, 201, 400, 401, 404)
+- Invalid input returns 400 with descriptive error messages
+- Unauthorized requests return 401
+- API docs are generated and accessible at /docs
+- Rate limiting triggers at configured thresholds
+</verification>
+```
 
-For Claude Code, how you structure context matters.
+**Pattern for CLI tools:**
+```xml
+<verification>
+- All commands work with valid input
+- Invalid input produces helpful, non-technical error messages
+- `--help` output is comprehensive for every command
+- Exit codes: 0 for success, 1 for errors
+- Config file is created on first run if missing
+</verification>
+```
 
-**Rules:**
-- Place long reference material (existing code, docs) at the TOP of the prompt
-- Place the actual instruction/query at the BOTTOM
-- This improves response quality by up to 30% (per Anthropic testing)
-- Use XML tags to clearly separate reference material from instructions
+## 9. Outcome-Based Prompting
+
+For tasks on existing codebases, give the goal and let Claude investigate — this often outperforms prescriptive step-by-step instructions. State what success looks like, not the exact steps to get there.
+
+**Pattern:**
+```
+The checkout flow currently fails when a user applies a discount code after adding items.
+Fix this so that: (1) discount codes apply correctly regardless of when they're entered,
+(2) the cart total updates in real-time, (3) the existing test suite passes.
+
+Read the relevant code first to understand the current implementation before making changes.
+```
+
+**When to use:** Bug fixes, refactors, feature additions on existing code. When Claude needs investigative freedom.
+
+**When NOT to use:** Greenfield builds where you want a specific architecture. Use prescriptive decomposition instead.
+
+## 10. Context Window Optimization
+
+How you structure context affects output quality. Place reference material at the top and the task instruction at the bottom.
 
 **Pattern:**
 ```xml
@@ -198,44 +229,32 @@ For Claude Code, how you structure context matters.
 [paste database schema here]
 </existing-schema>
 
-Now, based on the existing code and schema above, implement the following new feature:
+Based on the code and schema above, implement the following:
 [specific instructions]
 ```
 
-## 10. Grounding and Verification
+For long prompts with critical instructions, place key constraints at both the beginning and end — instructions near the end take precedence when conflicts exist.
+
+## 11. Grounding and Anti-Hallucination
 
 Reduce hallucinations by requiring Claude to verify before acting.
 
 **Pattern:**
 ```
 Before making changes:
-1. Read the existing files in the project to understand the current architecture
+1. Read existing files to understand the current architecture
 2. Check what dependencies are already installed
-3. Follow the patterns established in the existing codebase
-4. Do not invent APIs or libraries — verify they exist first
-```
-
-## 11. Iterative Refinement Instructions
-
-Tell Claude how to self-correct.
-
-**Pattern:**
-```
-After implementing:
-1. Review your code for type safety — fix any TypeScript errors
-2. Check that all imports resolve to real modules
-3. Verify responsive design works at mobile (375px), tablet (768px), desktop (1280px)
-4. Test that all interactive elements have proper hover/focus/active states
-5. Ensure no accessibility issues (proper ARIA labels, keyboard navigation, color contrast)
+3. Follow patterns established in the existing codebase
+4. Verify that libraries and APIs exist before using them — do not invent packages
 ```
 
 ## 12. Scope Control
 
-Prevent Claude from expanding beyond the request.
+Prevent Claude from expanding beyond the request. Scope creep is one of the most common failure modes.
 
 **Pattern:**
 ```
-SCOPE: Only modify the files listed below. Do not create new files, refactor existing code,
+Scope: Only modify the files listed below. Do not create new files, refactor existing code,
 or add features beyond what is explicitly requested.
 
 Files to modify:
@@ -244,61 +263,85 @@ Files to modify:
 - src/lib/db/queries.ts
 ```
 
-## 13. Parallel Tool Use Optimization
+## 13. Realistic Data and Design
 
-For Claude Code specifically, enable efficient tool usage.
-
-**Pattern (included in system prompts):**
-```
-When exploring the codebase, read multiple files in parallel rather than one at a time.
-When creating multiple independent files, write them in parallel.
-Prioritize understanding the existing codebase structure before making changes.
-```
-
-## 14. Realistic Data and Design
-
-Prevent the "AI slop" aesthetic.
+Prevent generic AI output by specifying domain-appropriate data and visual identity.
 
 **Pattern:**
 ```
-Use realistic, contextually appropriate sample data — never placeholder text like "Lorem ipsum"
-or generic names like "John Doe". For an ecommerce site, use real-sounding product names,
-realistic prices, and varied product descriptions.
+Use realistic, domain-appropriate sample data — never "Lorem ipsum" or "John Doe".
+For an ecommerce site: real-sounding product names, realistic prices, varied descriptions.
 
-For UI design:
-- Choose a distinctive font from Google Fonts (not Inter, Roboto, or Arial)
+Visual identity:
+- Choose a distinctive font from Google Fonts (avoid Inter, Roboto, Space Grotesk, Arial)
 - Use a cohesive color palette with a strong primary color and sharp accents
-- Add micro-interactions and transitions that feel polished
-- Design for the specific domain — a fintech app should look different from a social network
+- Add micro-interactions and transitions
+- Design for the specific domain — a fintech app looks different from a social network
 ```
 
-## 15. Error Handling Strategy
+## 14. Agentic Reminders
 
-Define how errors should be handled rather than leaving it implicit.
+For full-app builds, three system-prompt reminders improve completion quality. Include these in Full-level prompts.
 
 **Pattern:**
 ```
-Error handling strategy:
-- Use typed error responses (never throw generic Error)
-- Show user-friendly error messages in the UI (toast notifications for actions, inline for forms)
+1. Persistence: Keep working until the entire implementation is complete. Do not stop with partial features or TODO comments.
+2. Anti-hallucination: Verify that all libraries, APIs, and imports exist before using them. Do not guess.
+3. Planning: Think through the architecture before writing code. Plan the data model and component hierarchy first.
+```
+
+## 15. WHY Over WHAT
+
+Explain the motivation behind constraints so Claude can generalize beyond the literal rule. A single explained constraint is more effective than multiple unexplained ones.
+
+**Pattern:**
+```
+Weak: "Use server actions for mutations"
+Strong: "Use server actions for mutations — they enable progressive enhancement, type-safe form handling, and eliminate the need for manual API route boilerplate"
+
+Weak: "No client-side state management"
+Strong: "Avoid client-side state management libraries — React Server Components handle data fetching natively with less complexity and better performance"
+```
+
+## 16. Error Handling Strategy
+
+Define the error handling approach rather than leaving it to defaults.
+
+**Pattern:**
+```
+Error handling:
+- Use typed error responses with error codes, not generic Error throws
+- Show user-friendly messages in the UI (toasts for actions, inline for forms)
 - Log detailed errors server-side for debugging
-- Handle network failures gracefully with retry logic where appropriate
-- Add proper loading states for all async operations
+- Handle network failures with retry logic where appropriate
+- Include loading states for all async operations
 - Include empty states for lists/tables with no data
 ```
 
-## 16. Security-First Instructions
+## 17. Security Requirements
 
-Embed security awareness into the prompt.
+Embed security awareness into the prompt for any app handling user data.
 
 **Pattern:**
 ```
-Security requirements:
-- Validate all user input on the server (never trust client-side validation alone)
-- Use parameterized queries (Drizzle handles this, but verify)
-- Implement proper CSRF protection for form submissions
-- Sanitize any user-generated content before rendering
+Security:
+- Validate all user input on the server — client-side validation is for UX only
+- Use parameterized queries for all database operations
+- Sanitize user-generated content before rendering
 - Use HttpOnly cookies for sensitive tokens
 - Apply rate limiting to authentication endpoints
 - Follow the principle of least privilege for database queries
+```
+
+## 18. Self-Critique
+
+For complex builds, instruct Claude to review its own output against the original constraints before finalizing. This catches mismatches between intent and implementation.
+
+**Pattern:**
+```
+After completing the implementation, review your work:
+1. Does each requirement from the spec have a corresponding implementation?
+2. Do the constraints hold — no violations of the rules above?
+3. Are there any hardcoded values that should be configurable?
+4. Would a new developer understand this code without additional context?
 ```

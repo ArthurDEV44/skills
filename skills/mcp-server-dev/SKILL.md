@@ -1,6 +1,8 @@
 ---
+model: opus
 name: mcp-server-dev
 description: "Build MCP (Model Context Protocol) servers in TypeScript with @modelcontextprotocol/sdk. Use when writing, reviewing, or refactoring MCP server code: (1) Creating MCP servers with McpServer, (2) Registering tools with registerTool, inputSchema, outputSchema, Zod validation, (3) Defining resources and resource templates, (4) Defining prompts with arguments, (5) Transports: StdioServerTransport, NodeStreamableHTTPServerTransport, SSE, (6) Tool annotations (readOnlyHint, destructiveHint, idempotentHint), (7) Error handling and isError responses, (8) Dynamic tool loading and tool list change notifications, (9) Middleware patterns for MCP tools, (10) Testing MCP servers with vitest, (11) Publishing and configuring for Claude Code, Cursor, Windsurf, (12) Any @modelcontextprotocol/sdk imports."
+argument-hint: "[server-name-or-description]"
 ---
 
 # MCP Server Development — TypeScript SDK
@@ -305,3 +307,31 @@ See [references/testing-distribution.md](references/testing-distribution.md) for
 - [references/transports.md](references/transports.md) — Stdio, Streamable HTTP, SSE, session management, Express integration
 - [references/advanced-patterns.md](references/advanced-patterns.md) — Tool registry, dynamic loading, middleware, lazy MCP pattern, annotations
 - [references/testing-distribution.md](references/testing-distribution.md) — Testing with vitest, CLI packaging, npm publishing, client auto-setup
+
+## Done When
+
+- [ ] MCP server compiles without errors (`tsc`)
+- [ ] All tools registered with inputSchema (Zod v4) and descriptions
+- [ ] Transport configured (stdio for CLI, HTTP for remote)
+- [ ] Error handling returns `isError: true` with human-readable messages
+- [ ] Client configuration generated for target platform (Claude Code/Desktop/Cursor)
+- [ ] Common pitfalls avoided (ESM, zod/v4, no console.log with stdio)
+
+## Constraints (Three-Tier)
+
+### ALWAYS
+- Use `zod/v4` for schema definitions — not `zod`
+- Use `z.object({})` wrappers — raw shapes don't work in SDK v2
+- Set `"type": "module"` in package.json
+- Return `isError: true` for application errors, throw only for protocol errors
+- Include descriptions on both tools and individual parameters
+
+### ASK FIRST
+- Transport choice when not specified (stdio vs HTTP)
+- Target client platform for configuration generation
+
+### NEVER
+- Use `console.log` with stdio transport — stdout is the MCP channel
+- Register duplicate tool names — they silently overwrite
+- Return empty content arrays — always include at least one content item
+- Use `zod` import instead of `zod/v4`

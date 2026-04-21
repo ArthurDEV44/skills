@@ -3,7 +3,7 @@ model: haiku
 name: react-doctor
 description: "React codebase health scanner that checks for security, performance, correctness, and architecture issues. Runs react-doctor CLI, interprets results, and provides actionable fix guidance. Use when the user says 'react-doctor', 'check my React code', 'React health check', 'scan React for issues', 'React audit', or after making React changes to catch issues early. Also triggers on: 'fix React performance', 'React best practices check', 'React code quality'. Do NOT trigger for non-React code, general JavaScript questions, or backend-only changes."
 argument-hint: "[file-or-folder?]"
-allowed-tools: Read, Grep, Glob, Bash(npx *)
+allowed-tools: Read, Grep, Glob, Bash(bunx *)
 ---
 
 # react-doctor — React Codebase Health Scanner
@@ -66,7 +66,7 @@ Print: `[Step 1/3] SCAN`
 **1b. Run react-doctor:**
 
 ```bash
-npx -y react-doctor@latest {target} --verbose --diff
+bunx -y react-doctor@latest {target} --verbose --diff
 ```
 
 - `--verbose` provides detailed diagnostics per category
@@ -121,7 +121,7 @@ Print: `[Step 3/3] GUIDE`
 **3b. After fixes are applied, re-run to verify:**
 
 ```bash
-npx -y react-doctor@latest {target} --verbose --diff
+bunx -y react-doctor@latest {target} --verbose --diff
 ```
 
 Compare the new score to the original. Report improvement.

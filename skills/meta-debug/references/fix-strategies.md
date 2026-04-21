@@ -226,7 +226,7 @@ cargo build          # full build if check passes
 cargo clippy         # lint for additional issues
 
 # TypeScript
-npx tsc --noEmit     # type check only
+bunx tsc --noEmit     # type check only
 npm run build        # full build
 
 # Go
@@ -248,8 +248,8 @@ mypy file.py                  # type check (if configured)
 cargo test test_name -- --exact
 
 # TypeScript/JavaScript
-npx jest --testNamePattern="test name"
-npx vitest run path/to/test.ts
+bunx jest --testNamePattern="test name"
+bunx vitest run path/to/test.ts
 
 # Python
 pytest path/to/test.py::test_name -v
@@ -306,6 +306,8 @@ Every modified line must trace to the root cause:
 ```
 
 ### Change Scope Limits
+
+For the canonical scope thresholds shared across skills, see `@~/.claude/skills/_shared/scope-guard.md`.
 
 | Change scope | Action |
 |---|---|

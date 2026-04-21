@@ -35,38 +35,48 @@ Also avoid these — AI converges to them after Layer 1 is blocked:
 - Plus Jakarta Sans
 - Sora
 
+### Emerging Defaults to Watch
+
+- Bricolage Grotesque is trending toward overuse in AI outputs — use with caution, may need Layer 2 ban status soon
+- Variable fonts as primary strategy (one font, extreme weight axis) is becoming the dominant award-winning approach
+- Maximalist/expressive typography is replacing the minimalist neo-grotesque era
+
 ### Recommended Approach — Choose by Personality
+
+Pick the default pairing for the personality that fits the project. If none feel right,
+see "Alternative Pairings" below for more options within each category.
 
 **Confident and editorial:**
 - Instrument Serif (display) + Instrument Sans (body)
-- Fraunces (display) + Source Sans 3 (body)
-- Playfair Display (display) + IBM Plex Sans (body)
 
 **Technical and precise:**
 - JetBrains Mono (display/labels) + Geist Sans (body)
-- IBM Plex Mono (display) + IBM Plex Sans (body)
-- Fira Code (code/labels) + Atkinson Hyperlegible (body)
 
 **Warm and approachable:**
 - Bricolage Grotesque (display + body, use weight axis for contrast)
-- Gambetta (display) + General Sans (body)
-- Clash Display (display) + Satoshi (body)
 
 **Bold and contemporary:**
 - Cabinet Grotesk (display) + General Sans (body)
-- Switzer (display + body, variable weight)
-- Cal Sans (display) + Geist Sans (body)
 
 **Elegant and refined:**
 - Cormorant Garamond (display) + Questrial (body)
-- Libre Caslon Display (display) + Libre Franklin (body)
-- Bodoni Moda (display) + Work Sans (body)
 
-**Award-winning pairings (from current Awwwards/Codrops leaders 2025-2026):**
+**Award-winning pairings (from current Awwwards/Codrops leaders):**
+These require commercial licensing — use only when the project has font budget.
 - Neue Haas Grotesk + Freight Display — Swiss precision + editorial warmth
 - Söhne + Canela — contemporary grotesque + contemporary serif
 - GT Alpina + GT America — within-family contrast, extremely clean
 - Any variable grotesque + a high-contrast serif (Domaine, Editorial New, Canela)
+
+### Alternative Pairings
+
+If the default for a category doesn't fit, try these:
+
+- **Confident/editorial:** Fraunces + Source Sans 3 | Playfair Display + IBM Plex Sans
+- **Technical/precise:** IBM Plex Mono + IBM Plex Sans | Fira Code + Atkinson Hyperlegible
+- **Warm/approachable:** Gambetta + General Sans | Clash Display + Satoshi
+- **Bold/contemporary:** Switzer (variable weight, single font) | Cal Sans + Geist Sans
+- **Elegant/refined:** Libre Caslon Display + Libre Franklin | Bodoni Moda + Work Sans
 
 ### Single Variable Font Strategy
 Instead of pairing two fonts, use ONE variable font across the entire hierarchy by exploiting
@@ -94,7 +104,7 @@ Good variable fonts for this: Bricolage Grotesque, Switzer, Cabinet Grotesk, Gei
 
 ### Recommended Scale — Perfect Fourth (1.333 ratio)
 
-This ratio is currently dominant among award-winning editorial sites:
+This ratio is dominant among award-winning editorial sites:
 
 ```css
 :root {
@@ -234,6 +244,27 @@ A heading that is only slightly larger than body text creates NO hierarchy. Be b
 h1 { max-width: 20ch; }   /* Forces line breaks that create visual shapes */
 h2 { max-width: 30ch; }
 ```
+
+## Precision Whitespace Control (text-box-trim)
+
+`text-box-trim` (shipping 2025) removes the extra whitespace above and below text that
+comes from font metrics. This allows pixel-precise alignment without negative margins.
+
+```css
+/* Remove top/bottom metric whitespace from headings for precise alignment */
+h1, h2, h3 {
+  text-box-trim: both;
+  text-box-edge: cap alphabetic;
+}
+
+/* Useful for: flush-aligning text to containers, optical centering in buttons */
+.btn {
+  text-box-trim: both;
+  text-box-edge: cap alphabetic;
+}
+```
+
+When available, prefer `text-box-trim` over negative `margin-top` hacks for vertical alignment.
 
 ## What NOT To Do
 

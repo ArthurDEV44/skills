@@ -58,10 +58,13 @@ This document lists the research backing each improvement to the meta-debug pipe
 - **ROBIN: Conversational Debugging with GitHub Copilot** — Microsoft Research, IEEE VL/HCC, Aug 2024 (Best Paper)
   - "Investigate & Respond" pattern: gather context before proposing fixes
   - 2.5x improvement in bug localization, 3.5x in resolution
-- **LLM4FL: Multi-Agent Fault Localization via Graph-Based Retrieval and Reflexion** — Concordia/DePaul/Manitoba, Mar 2025
-  - 169% higher Top-1 accuracy vs Ochiai (classical SBFL)
+- **LLM4FL: Multi-Agent Fault Localization via Graph-Based Retrieval and Reflexion** — [arxiv.org/abs/2409.13642](https://arxiv.org/abs/2409.13642), Concordia/DePaul/Manitoba, Mar 2025
+  - +18.55% Top-1 accuracy vs AutoFL on Defects4J v2.0.0
   - Removing call-graph causes 17-23% accuracy drop
   - Self-reflection critique improves ~11%
+- **AgentFL: Scaling LLM-based Fault Localization** — [arxiv.org/abs/2403.16362](https://arxiv.org/abs/2403.16362), 2025
+  - Three-phase: Comprehension, Navigation, Confirmation
+  - 157/395 bugs Top-1 on Defects4J-V1.2.0, $0.074/bug avg cost
 
 ## Context Window Management
 
@@ -103,6 +106,38 @@ This document lists the research backing each improvement to the meta-debug pipe
 - **OPENDEV** — Mar 2026
   - Terminal-native CLI agent with strict context management
 - **SWE-bench SOTA (Mar 2026)**: Sonar Foundation Agent at 79.2% on SWE-bench Verified
+
+## Effort Scaling and Context Engineering
+
+- **Building Effective AI Agents** — [anthropic.com/research/building-effective-agents](https://www.anthropic.com/research/building-effective-agents)
+  - Effort scaling: simple queries warrant 1 agent with 3-10 calls; complex need 10+ subagents
+  - Simplicity-first: add multi-step agentic systems only when simpler solutions fall short
+- **How We Built Our Multi-Agent Research System** — [anthropic.com/engineering/multi-agent-research-system](https://www.anthropic.com/engineering/multi-agent-research-system)
+  - Multi-agent uses ~15x more tokens than standard chat — requires tasks where overhead is justified
+  - Parallel tool calling cut research time by up to 90% for complex queries
+- **Boris Cherny (Claude Code creator): 10 Tips** — [jitendrazaa.com](https://www.jitendrazaa.com/blog/others/tips/10-claude-code-tips-from-the-creator-boris-cherny-february/)
+  - "Give Claude a feedback loop and it will 2-3x the quality"
+  - Plan Mode reduces token consumption ~53% (38k → 18k per session)
+- **Cutting Through the Noise: Smarter Context Management** — [blog.jetbrains.com/research/2025/12](https://blog.jetbrains.com/research/2025/12/efficient-context-management/)
+  - Observation masking: +2.6% solve rate, -52% cost vs unmanaged baselines
+  - LLM summarization caused 15% trajectory elongation vs masking
+
+## Bug-Inducing Commit as Fix Context
+
+- **LLM-Based Regression Bug Repair** — University of Melbourne, Jun 2025
+  - Incorporating bug-inducing commit diff yields 1.8x more successful repairs vs without
+
+## SWE-bench SOTA (Mar 2026)
+
+- **Sonar Foundation Agent** — [sonarsource.com](https://www.sonarsource.com/blog/introducing-sonar-foundation-agent/), 79.2% SWE-bench Verified
+  - "Free workflow" over rigid pipelines — LLM determines own investigation path
+  - AST symbol searching via LlamaIndex, test-driven verification
+- **Cursor Debug Mode** — [cursor.com/docs/agent/debug-mode](https://cursor.com/docs/agent/debug-mode)
+  - 5-step: explore+hypothesize → instrument → reproduce → analyze → fix+verify
+  - Only system that explicitly captures runtime data via instrumentation
+- **Google BRT Agent** — [arxiv.org/abs/2502.01821](https://arxiv.org/abs/2502.01821), Feb 2025
+  - Reproduction tests improve fix generation by 30%, reduce time-to-fix by 21%
+  - Dominant success bigram: (edit, test) — tight generate-validate loops
 
 ## Anti-Patterns in AI Debugging
 

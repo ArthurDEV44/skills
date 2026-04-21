@@ -93,81 +93,140 @@ cards. This is what AI thinks "serious SaaS product" looks like because Linear p
 **Fix:** If building a dark SaaS UI, choose a different accent (forest green, rust, ochre),
 a different border-radius (2px sharp or 0px brutalist), and a different font (IBM Plex, Bricolage).
 
+### 14. The Hero Metric Layout
+**What:** Large number + small label below + colored accent line to the left. Appears in ~90% of AI-generated dashboards and landing pages.
+**Fix:** Use typography hierarchy and layout position to communicate importance instead of the formulaic metric-label-accent pattern. Let the content structure dictate the presentation.
+
+### 15. The Frankenstein Layout
+**What:** Individual components look fine in isolation, but the page has no unified visual hierarchy. Sections feel like they were designed separately and stacked.
+**Root cause:** AI generates components one at a time without maintaining page-level compositional awareness.
+**Fix:** After assembling all sections, review the page as a whole. Check: does the eye flow naturally? Is there a clear visual hierarchy across sections, not just within them?
+
 ## Tier 3: Subtle AI Patterns (detected by senior designers)
 
-### 14. Uniform Spacing
+### 16. Uniform Spacing
 **What:** Every section has the same padding. Every card has the same gap. The page
 feels like a CSS framework demo.
 **Fix:** Vary spacing intentionally. Hero: 128px padding. Regular sections: 96px.
 Tight content groups: 48px. See `layout-patterns.md`.
 
-### 15. Everything Centered
+### 17. Everything Centered
 **What:** All text centered. All sections centered. All headings centered.
 **Fix:** Left-align body text (always). Center headings only as a deliberate composition
 choice. Use asymmetric layouts.
 
-### 16. Safe Color Choices
+### 18. Safe Color Choices
 **What:** Neutral grey palette with a "safe" blue accent. Nothing offensive, nothing memorable.
 **Fix:** Choose colors with personality appropriate to the brand. Use OKLCH with actual chroma.
 See `color-system.md`.
 
-### 17. Decorative SVG Blobs
+### 19. Decorative SVG Blobs
 **What:** Abstract blob shapes, wave dividers, decorative dots/circles.
 **Fix:** Remove them. If a section transition feels abrupt, fix the spacing.
 
-### 18. Stock Illustration Style
+### 20. Stock Illustration Style
 **What:** Flat/geometric illustrations (unDraw, Blush, Storyset) as hero images.
 **Fix:** Use real UI screenshots, photography, or no illustration at all.
 
-### 19. Excessive Micro-Copy
+### 21. Excessive Micro-Copy
 **What:** Every button says something "clever." Every empty state has a cute message.
 **Fix:** Write clear, direct copy. "Sign up" not "Get started on your journey."
 
-### 20. No Texture
+### 22. No Texture
 **What:** Every surface is a perfect solid color. No grain, no noise, no tonal variation.
 **Root cause:** AI generates mathematically clean surfaces. Human designers add imperfection.
 **Fix:** Add grain/noise overlay at 3-5% opacity on key surfaces. See `texture-and-depth.md`.
 
-### 21. Tailwind Palette Names as Color System
+### 23. Tailwind Palette Names as Color System
 **What:** Using `bg-slate-50 text-slate-900 border-slate-200` directly instead of custom
 semantic properties.
 **Root cause:** AI generates Tailwind utility classes from training data.
 **Fix:** Always define custom CSS properties in OKLCH. Never use Tailwind palette names
 for your color system.
 
-### 22. Identical Card Heights
+### 24. Identical Card Heights
 **What:** Every card in a grid is the exact same height, creating a rigid, template-like feel.
 **Fix:** Allow natural height variation. Or use asymmetric grid where some cards span
 multiple rows. See `layout-patterns.md`.
 
-### 23. Default Button Patterns
+### 25. Default Button Patterns
 **What:** Primary (filled) + Secondary (outlined) + Ghost (text) — the exact shadcn button
 variant trio, styled identically to the library defaults.
 **Fix:** Style buttons for your specific product tone. See `component-distinctiveness.md`.
 
+### 26. Missing Accessibility Signals
+**What:** No visible focus states, no skip links, heading hierarchy broken (h1 → h3), color contrast below WCAG AA.
+**Root cause:** AI generates visually appealing output without considering keyboard navigation or screen readers.
+**Fix:** See `accessibility.md`. Check contrast ratios, heading order, focus visibility, and semantic HTML.
+
+## Tier 4: Emerging AI Patterns (2025-2026)
+
+### 27. AI Spontaneity Layouts
+**What:** Hyper-personalized, seemingly random layout variations that are actually generated
+from the same underlying template with randomized parameters.
+**Root cause:** AI tools now generate "creative variation" by default, producing layouts that
+look different on every page load but share identical structural DNA.
+**Fix:** Intentional composition is designed once, not randomized. If a layout feels "creative"
+but you can't explain why each element is placed where it is, it's generated noise.
+
+### 28. Y2K Retro-Saturation
+**What:** Hyper-saturated neon palettes, retro-futurist gradients, and 2000s-era color
+combinations marketed as "bold" or "anti-corporate."
+**Root cause:** AI design tools over-indexed on the Y2K revival trend, producing saturated
+palettes as the opposite of the muted corporate aesthetic they're trained to avoid.
+**Fix:** Bold does not mean saturated. Use OKLCH chroma intentionally — high chroma on one
+accent element, not across the entire palette.
+
+### 29. Bento Grid Monoculture
+**What:** Every feature section uses a bento grid (unequal rectangles in a grid) regardless
+of whether the content calls for it. The bento grid has become the 2025 equivalent of the
+three-column feature grid.
+**Root cause:** Bento grids appeared as the "creative" alternative to equal columns, and AI
+tools now default to them as the new "modern" layout.
+**Fix:** Choose layout FROM the content: single-column narrative, asymmetric split, typography-
+driven hero, or yes — a bento grid, but only when content has genuinely unequal importance.
+
+### 30. ARIA Overuse
+**What:** Redundant ARIA roles, labels, and attributes on elements that already have native
+semantics. `<button role="button">`, `<nav role="navigation">`, `aria-label` that duplicates
+visible text.
+**Root cause:** AI treats ARIA as an "accessibility signal" and adds it liberally. Pages with
+heavy ARIA usage average 57 accessibility errors — more than double those without.
+**Fix:** First rule of ARIA: don't use ARIA if a native HTML element exists. Remove redundant
+roles. Use `aria-label` only on elements without visible text (icon-only buttons).
+
+### 31. Hero Metric Pattern (promoted from Tier 3)
+**What:** Large number + small label below + colored accent line to the left. Now appears in
+~90% of AI-generated dashboards and landing pages. Previously Tier 3 (#14), now detectable
+by anyone as an AI tell.
+**Fix:** Communicate importance through typography hierarchy and layout position, not through
+the formulaic number-label-accent trio. Let the content structure vary — not every stat needs
+the same visual treatment.
+
 ## Self-Review Checklist
 
-Before presenting the design, answer these questions:
+Before presenting the design, answer these questions. Every "no" is a fix before shipping.
 
-1. Could a designer at Exo Ape or Zajno tell this was AI-generated? What gives it away?
-2. Is there ANYTHING that exists "because that's what websites usually look like"?
-3. Could I explain WHY every font size, color, and spacing value was chosen?
-4. Does this look like a template or specifically designed for THIS product?
-5. Is there any animation that doesn't serve a clear functional purpose?
-6. Am I using more than one accent color? Why?
-7. Are all my sections the same width? Should some be narrower or wider?
-8. Is there enough whitespace that the design can "breathe"?
-9. Would removing any element hurt the design? If not, remove it.
-10. Does this design have a POINT OF VIEW, or is it trying to please everyone?
-11. Is the typography contrast extreme enough (3x+ size jumps, 400+ weight difference)?
-12. Are colors in OKLCH with warm/cool tinting (not pure grey)?
-13. Is there texture/grain where appropriate?
-14. Does the border-radius vary intentionally by element type?
-15. Does at least one element break the expected grid?
+1. Could I explain WHY every font size, color, and spacing value was chosen?
+2. Does this look specifically designed for THIS product, not a template?
+3. Would removing any element hurt the design? If not, remove it.
+4. Does the design have a POINT OF VIEW, or is it trying to please everyone?
+5. Is the typography contrast extreme enough (3x+ size jumps, 400+ weight difference)?
+6. Are colors in OKLCH with warm/cool tinting (no pure grey)?
+7. Is there texture/grain where appropriate?
+8. Does the border-radius vary intentionally by element type?
+9. Does at least one element break the expected grid?
+10. Is there enough whitespace that the design can "breathe"?
+11. Are contrast ratios WCAG AA compliant (see `accessibility.md`)?
 
-## The Three-Second Test
+## Three-Second Test (Scored)
 
-After all fixes, look at the complete design for three seconds and answer:
-- What makes this DISTINCTIVE? (If the answer is "it's clean," it has failed.)
-- What is the ONE bold choice? (There must be at least one.)
-- Would this feel at home on awwwards? (If not, push harder.)
+After all fixes, look at the complete design as a whole for three seconds. Score 0 or 1 on each:
+
+1. **DISTINCTIVE:** Can you name what makes it visually unique? (not just "clean")
+2. **BOLD CHOICE:** Is there one choice a safe designer would not have made?
+3. **TENSION:** Is there visual contrast — large/small, dense/sparse, serif/sans?
+4. **HUMAN TOUCH:** Is there texture, asymmetry, or deliberate imperfection?
+5. **POINT OF VIEW:** Does the design say something about THIS product specifically?
+
+**Score: __/5.** Below 3 → add one bold choice and re-score before presenting.

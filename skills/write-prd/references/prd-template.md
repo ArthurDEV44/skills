@@ -160,7 +160,7 @@ IMPORTANT: Every NFR must have a specific, measurable number. No subjective adje
 
 ## Edge Cases & Error States
 
-Systematic coverage of unhappy paths. Requirements-related defects cost 50-100x more to fix post-launch.
+Systematic coverage of unhappy paths. Evidence shows earlier defect discovery significantly reduces cost (Boehm 1981, NIST 2002).
 
 | # | Scenario | Trigger | Expected Behavior | User Message |
 |---|----------|---------|-------------------|--------------|

@@ -1,7 +1,7 @@
 ---
 model: opus
 name: review-story
-description: "End-to-end review and correction workflow for an implemented user story or a complete PRD. Orchestrates 7 phases: intake, research (/meta-code pipeline), static analysis, parallel AI code review + security audit (3-layer: SAST/Secrets/SCA), risk-tiered remediation, and executive summary report. Signal-over-noise design: pre-filters generated files, scopes to diff+1 hop, targets 2-4 high-value findings per file. Does NOT commit or push — only reviews and fixes. Invoke with /review-story [prd-path] [story-id?]."
+description: "End-to-end review and correction workflow for an ALREADY-IMPLEMENTED user story (or full PRD whose stories have been coded). Reviews the CODE against its PRD — not the PRD document. Orchestrates 7 phases: intake, research (/meta-code pipeline), static analysis, parallel AI code review + security audit (3-layer: SAST/Secrets/SCA), risk-tiered remediation, and executive summary report. Signal-over-noise design: pre-filters generated files, scopes to diff+1 hop, targets 2-4 high-value findings per file. Do NOT use for greenfield scaffolding, code generation, or for reviewing an unimplemented PRD document (use /meta-review-prd for that). Does not commit or push. Invoke with /review-story [prd-path] [story-id?]."
 argument-hint: "[prd-path] [story-id?]"
 ---
 
@@ -11,10 +11,12 @@ Review the following: $ARGUMENTS
 
 ## Overview
 
-Review and correction pipeline for already-implemented user stories. Takes a PRD (single story or full PRD), researches best practices, runs static analysis, then parallel AI code review + security audit, then risk-tiered remediation. Stops after correction — no commit or push.
+Review and correction pipeline for already-implemented user stories. Takes a PRD (single story or full PRD), researches best practices (meta-code-style pattern), runs static analysis, then parallel AI code review + security audit, validates findings, then risk-tiered remediation with scope-guard. Stops after correction — no commit or push.
 
 **Key principles:**
+- Context compression at every phase boundary (Anthropic context engineering)
 - Research-informed review — understand best practices before judging code
+- Intent-aware — understand *why* the code was written before judging *how*
 - Static-first — run deterministic checks (cheap, fast, high-precision) before AI review
 - Fresh-context reviewers — subagents with no bias toward the code (Actor/Critic isolation)
 - Signal over noise — target 2-4 high-value findings per file, suppress style opinions
@@ -24,50 +26,9 @@ Review and correction pipeline for already-implemented user stories. Takes a PRD
 
 ## Execution Flow
 
-```
-$ARGUMENTS -> [prd-path] [story-id?]
-       |
-       v
-+---------------+
-|  Phase 1:     |
-|   INTAKE      |  <- Parse PRD, map changed files, pre-filter, size check
-+-------+-------+
-        | stories + criteria + filtered file map + size assessment
-        v
-+---------------+
-|  Phase 2:     |
-|  RESEARCH     |  <- /meta-code pipeline (best practices context)
-+-------+-------+
-        | research synthesis
-        v
-+---------------+
-|  Phase 2.5:   |
-| STATIC ANALYSIS| <- Deterministic checks: lint, format, type-check (fast, cheap)
-+-------+-------+
-        | mechanical issues caught
-        v
-+-------+-------------------+
-|         PARALLEL           |
-|  +----------+  +----------+|
-|  | Phase 3: |  | Phase 4: ||
-|  |  REVIEW  |  | SECURITY ||
-|  |(quality) |  | (audit)  ||
-|  +----+-----+  +----+-----+|
-|       |              |      |
-+-------+--------------+------+
-        v              v
-+-------------------------+
-|      Phase 5:           |
-|     REMEDIATE           |  <- Risk-tiered fixes, re-verify
-|  (max 3 iterations)    |
-+-----------+-------------+
-            | zero CRITICAL/HIGH
-            v
-+-------------------------+
-|      Phase 6:           |
-|     SUMMARY             |  <- Executive summary + structured report
-+-------------------------+
-```
+`INTAKE → RESEARCH → STATIC → REVIEW+SECURITY (parallel) → VALIDATE → REMEDIATE → SUMMARY`
+
+Print `[Phase N] PHASE_NAME` before each phase.
 
 ## Phase-by-Phase Execution
 
@@ -80,7 +41,7 @@ Parse the PRD and identify the review scope.
 - `$ARGUMENTS` contains a file path → read that file as the PRD
 - `$ARGUMENTS` contains a story ID (e.g., `US-001`) → review only that story
 - No story ID → review ALL stories in the PRD (full PRD review mode)
-- If arguments are ambiguous → ask the user with AskUserQuestion
+- If arguments are ambiguous → infer the most likely match from PRD content
 
 **1b. Read and parse the PRD:**
 
@@ -95,19 +56,13 @@ Read the PRD file. For each story in scope, extract:
 Identify which files implement the stories. Run in order, stop at first success:
 
 ```bash
-# 1. Branch diff against main (preferred) — include stat for line counts
-git diff --name-only --stat main...HEAD
-
-# 2. Fallback: branch diff against master
-git diff --name-only --stat master...HEAD
-
-# 3. Fallback: unstaged + staged changes
-git diff --name-only --stat HEAD && git diff --name-only --stat --cached
-
+git diff --name-only --stat main...HEAD                                    # 1. Branch diff vs main (preferred)
+git diff --name-only --stat master...HEAD                                  # 2. Fallback: vs master
+git diff --name-only --stat HEAD && git diff --name-only --stat --cached   # 3. Fallback: unstaged + staged
 # 4. Fallback: ask the user
 ```
 
-If reviewing a single story, ask: "Which of these files implement {story_title}?" — or if the file list is small (<10 files), review all.
+If reviewing a single story and the file list is large (>10 files), infer the most relevant files from imports and naming. Otherwise review all.
 
 If reviewing a full PRD, review all changed files.
 
@@ -123,13 +78,26 @@ If reviewing a full PRD, review all changed files.
 **Size assessment** — compute total lines changed (additions + modifications):
 - **< 400 lines:** Optimal — proceed normally
 - **400-500 lines:** Acceptable — proceed with note
-- **> 500 lines:** Flag for chunking — AI review quality degrades sharply above this threshold. Suggest reviewing by story or by logical grouping. Ask user how to proceed.
+- **> 500 lines:** Log a chunking warning, then proceed — review by story or logical grouping if multiple stories are in scope.
 
 **1e. Read all files in scope:**
 
 Read every file identified in 1c-1d using the Read tool. Also read **1 dependency hop**: for each changed file, identify its direct importers/callers and the files it imports. This provides context without reviewing the entire codebase.
 
-**1f. Display review scope:**
+**1f. Extract developer intent:**
+
+Understand *why* the code was written this way before judging it. This reduces false positives from misunderstood context.
+
+```bash
+git log --oneline main...HEAD    # Sequence of changes
+git log --format="%B" main...HEAD  # Full commit messages with context
+```
+
+Extract and compress into a brief intent summary: what the developer was trying to accomplish, any noted constraints or tradeoffs, and any "TODO" or "HACK" markers that signal known technical debt.
+
+Pass this intent context to the review agents alongside the research brief.
+
+**1g. Display review scope:**
 
 ```
 ## Review Scope
@@ -152,178 +120,61 @@ Read every file identified in 1c-1d using the Read tool. Also read **1 dependenc
 - path/to/caller.ext (imports changed file)
 - ...
 
-Proceed with review?
 ```
 
-**GATE:** User confirms scope (or scope is reasonable and auto-proceeds).
+**1h. Check for REVIEW.md:**
+
+Look for `REVIEW.md` files in the repo hierarchy (project root, directories containing changed files). REVIEW.md contains review-specific instructions separate from CLAUDE.md — conventions the review agents should enforce. If found, pass its contents to Phase 3 and Phase 4 agents alongside the research brief.
+
+**1i. Detect status tracking:**
+
+Look for a status JSON file alongside the PRD:
+- If PRD is `tasks/prd-foo.md` → check for `tasks/prd-foo-status.json`
+- If found → read it, verify the target story is `IN_REVIEW`
+- If not found → create a minimal status JSON from the PRD's story list
+- If story status is not `IN_REVIEW` → log a warning and proceed (the user invoked the command explicitly)
+
+**GATE:** Scope parsed and displayed.
+
+**Phase 1 Summary:** Stories in scope (IDs + titles + criteria), filtered file list with line counts, context files (1-hop), intent summary, size assessment, status JSON path.
 
 ---
 
-### Phase 2 — RESEARCH (mandatory /meta-code pipeline)
+### Phase 2 — RESEARCH (meta-code-style research pattern)
 
-Research best practices to inform the review. The review is only as good as the reviewer's knowledge.
+Research best practices before judging code. See [Review Protocols](references/review-protocols.md) for exact prompt templates.
 
-**2a. Spawn agent-websearch:**
+**2a.** Spawn `agent-websearch` (model: sonnet) — research best practices, anti-patterns, security considerations for the feature area. Wait for completion, compress to <500 words.
 
-```
-Agent(
-  description: "Research best practices for {feature_area}",
-  prompt: <see references/review-protocols.md — Research prompt>,
-  subagent_type: "agent-websearch"
-)
-```
+**2b.** Detect codebase manifests (Cargo.toml, package.json, pyproject.toml, go.mod).
 
-Focus the research on:
-- Best practices for implementing this type of feature
-- Common mistakes and anti-patterns
-- Security considerations specific to this feature type
-- Testing best practices for this domain
+**2c.** Spawn `agent-explore` + docs agent (model: sonnet) **in parallel in a SINGLE message**. Explore codebase patterns and fetch library documentation via ctx7 CLI.
 
-Wait for completion. Extract key findings, compress to <500 words.
-
-**2b. Detect codebase and libraries:**
-
-```
-Glob: Cargo.toml
-Glob: package.json
-Glob: pyproject.toml
-Glob: go.mod
-```
-
-**2c. Spawn agent-explore + agent-docs in parallel:**
-
-```
-// If codebase detected:
-Agent(
-  description: "Explore codebase patterns for {feature_area}",
-  prompt: <see references/review-protocols.md — Explore prompt>,
-  subagent_type: "agent-explore"
-)
-
-// If libraries identified:
-Agent(
-  description: "Fetch docs for {libraries}",
-  prompt: <see references/review-protocols.md — Docs prompt>,
-  subagent_type: "agent-docs"
-)
-```
-
-Spawn both in a SINGLE message for true parallel execution.
-
-**2d. Synthesize research into a review brief:**
-
-Combine all findings into a concise brief that informs Phases 3 and 4. Include:
-- Best practices the implementation should follow
-- Common pitfalls to check for
-- Correct API usage for libraries in use
-- Security considerations specific to this feature
+**2d.** Synthesize all findings into a compressed review brief (<500 words): best practices, pitfalls, correct API usage, security considerations. This brief is passed to Phase 3 and 4 agents.
 
 **GATE:** Research synthesis complete.
+
+**Phase 2 Summary:** Compressed review brief (<500 words) — best practices, anti-patterns, correct API usage, security considerations.
 
 ---
 
 ### Phase 2.5 — STATIC ANALYSIS (deterministic, before AI review)
 
-Run cheap, fast, high-precision deterministic checks before spending AI tokens. These catch mechanical issues and free AI review for deeper analysis.
+Run deterministic checks (lint, format, type-check) before spending AI tokens. See [Static Analysis Protocol](references/static-analysis-protocol.md) for language-specific commands, tables, and detailed steps.
 
-**2.5a. Detect and run language-specific tools:**
-
-| Language | Linter/Checker | Command |
-|----------|---------------|---------|
-| Rust | Clippy + format check | `cargo clippy --all-targets 2>&1; cargo fmt --check 2>&1` |
-| TypeScript/JS | ESLint + Prettier | `npx eslint {changed_files} 2>&1; npx prettier --check {changed_files} 2>&1` |
-| Python | Ruff (lint + format) | `ruff check {changed_files} 2>&1; ruff format --check {changed_files} 2>&1` |
-| Go | vet + staticcheck | `go vet ./... 2>&1; staticcheck ./... 2>&1` |
-
-Only run tools that are already configured in the project (check for config files: `.eslintrc*`, `rustfmt.toml`, `ruff.toml`, `pyproject.toml [tool.ruff]`, etc.). Do NOT install or configure new tools.
-
-**2.5b. Type checking (if configured):**
-
-| Language | Command |
-|----------|---------|
-| TypeScript | `npx tsc --noEmit 2>&1` |
-| Python (mypy) | `mypy {changed_files} 2>&1` |
-| Rust | Already checked by `cargo clippy` |
-
-**2.5c. Collect static analysis results:**
-
-Parse output into structured findings:
-- Errors → map to MUST_FIX
-- Warnings → map to SHOULD_FIX
-- Info/style → map to CONSIDER
-
-These findings go directly into Phase 5's remediation queue. They do NOT need AI review — they are deterministic and high-precision.
+**Key steps:** Detect project tools (2.5a), run type checking (2.5b), collect results mapped to severities (2.5c), git blame hotspot analysis (2.5d), generate 3-5 targeted risk hypotheses (2.5e). Only run tools already configured — do NOT install new ones.
 
 **GATE:** Static analysis complete. Results stored for Phase 5.
+
+**Phase 2.5 Summary:** Static analysis findings (errors/warnings mapped to severities), risk hypotheses list.
 
 ---
 
 ### Phase 3 — CODE REVIEW (parallel with Phase 4)
 
-Spawn a fresh-context read-only subagent for thorough code review.
+Spawn agent-explore with the Code Review template from review-protocols.md. The review agent checks **8 categories** in priority order: (1) Acceptance Criteria Compliance, (2) Correctness, (3) Architecture & Design, (4) Error Handling & Logging, (5) Quality, (6) Performance, (7) Tests, (8) Best Practices from Phase 2 research.
 
-```
-Agent(
-  description: "Code review for {story_title}",
-  prompt: <see references/review-protocols.md — Code Review prompt>,
-  subagent_type: "agent-explore"
-)
-```
-
-The review agent checks (8 categories — priority order):
-
-**1. Acceptance Criteria Compliance**
-- For each criterion: is it fully implemented? Cite `file:line` as evidence.
-- Are there gaps between criteria and implementation?
-- Are there criteria that are only partially met?
-- Do function/class names reflect story vocabulary?
-- Does the implementation include tests for each acceptance criterion?
-
-**2. Correctness**
-- Logic errors, off-by-one, incorrect conditions
-- Null/undefined/None handling
-- Error path coverage
-- Edge cases (empty input, boundary values, concurrent access)
-- State transitions — are all valid transitions handled?
-
-**3. Architecture & Design**
-- SOLID principles adherence (single responsibility, open-closed, etc.)
-- Coupling/cohesion — is the code appropriately decoupled?
-- Consistent abstraction levels within functions/modules
-- Appropriate use of design patterns (not over-engineered, not under-structured)
-
-**4. Error Handling & Logging**
-- Exception specificity (no bare `catch` or `catch Exception`)
-- Log levels appropriate (no `error` for info-level events)
-- PII/secrets in logs — sensitive data must never be logged
-- Structured logging where the project uses it
-- Error messages actionable for debugging
-
-**5. Quality**
-- Naming clarity, readability
-- Cognitive complexity — flag functions with complexity > 10, hard-gate > 20
-- DRY violations (copy-pasted blocks)
-- Consistency with project conventions
-- Dead code, unused imports, leftover debug statements
-
-**6. Performance**
-- Unnecessary allocations, N+1 queries
-- Blocking I/O in async contexts
-- Memory leaks, unbounded growth
-- Missing caching for expensive operations
-- Regex recompilation in loops, unindexed queries
-
-**7. Tests**
-- Coverage for new functionality (behavior-focused, not line-count obsessed)
-- Edge case tests (empty, zero, max, error conditions)
-- Test determinism (no timing deps, no random, no network)
-- Assertion quality (testing behavior, not implementation details)
-- Error handling tested (not just happy path)
-
-**8. Best Practices (from Phase 2 research)**
-- Does the implementation follow researched best practices?
-- Are known anti-patterns present?
-- Is API usage correct per documentation?
+See [Review Protocols](references/review-protocols.md) — Phase 3 prompt template for the full checklist with detailed sub-items per category.
 
 **Scope discipline:** Review the diff + 1 dependency hop only. If a finding concerns code outside this scope, classify it as "TRACKED — out of scope" rather than a blocking finding.
 
@@ -336,21 +187,13 @@ The review agent checks (8 categories — priority order):
 
 Output: Structured report with MUST_FIX / SHOULD_FIX / CONSIDER / OK findings. Each finding includes an **Impact** statement explaining WHY it matters.
 
+**GATE:** (shared with Phase 4 — both must complete before proceeding)
+
 ---
 
 ### Phase 4 — SECURITY REVIEW (parallel with Phase 3)
 
-Spawn a fresh-context read-only subagent for security audit.
-
-```
-Agent(
-  description: "Security audit for {story_title}",
-  prompt: <see references/review-protocols.md — Security prompt>,
-  subagent_type: "agent-explore"
-)
-```
-
-The security agent follows the `/security-review` protocol with extended coverage:
+Spawn agent-explore with the Security template from review-protocols.md. The security agent follows the `/security-review` protocol with extended coverage:
 
 **Layer 1 — SAST (Source Analysis):**
 1. Read all changed files
@@ -379,160 +222,111 @@ Output: Structured security report with CRITICAL/HIGH/MEDIUM/LOW/INFO findings. 
 
 **GATE:** Both reviews complete.
 
+**Phase 3+4 Summary:** Consolidated findings (severity + file:line + issue + impact + fix suggestion), review verdict, security verdict.
+
+---
+
+### Phase 4.5 — VALIDATE (verification feedback loop)
+
+Every finding from Phase 3 and 4 is a **claim** about the code. Before spending effort on remediation, verify each claim is real.
+
+**4.5a. For each finding with a file:line citation:**
+
+```
+Grep/Read the cited file:line and confirm the described pattern actually exists.
+```
+
+- Finding cites `auth.rs:42` with "missing ownership check" → Read auth.rs:42, verify the pattern
+- Finding cites `handler.ts:15` with "SQL injection via string concat" → Grep for string concatenation in queries at that location
+
+**4.5b. Classify verification results:**
+
+| Result | Action |
+|--------|--------|
+| **CONFIRMED** — pattern exists exactly as described | Promote to remediation queue |
+| **PARTIAL** — pattern exists but description is inaccurate or exaggerated | Downgrade severity, reclassify, promote with corrected description |
+| **REFUTED** — pattern does not exist at cited location | Drop finding, log as false positive |
+| **STALE** — file:line has shifted (file was modified) | Re-locate pattern via Grep, update citation, then re-verify |
+
+**4.5c. Numeric confidence scoring (0-100):**
+
+Assign each surviving finding a confidence score on a 0-100 scale (matches Anthropic Code Review plugin pattern):
+
+| Score Range | Label | Criteria |
+|-------------|-------|----------|
+| **80-100** | HIGH | Static analysis error OR exact Grep match at cited location |
+| **50-79** | MEDIUM | Pattern confirmed by reading surrounding context (±10 lines) |
+| **25-49** | LOW | Inferred from research, plausible but ambiguous |
+| **0-24** | DROP | Not credible — drop the finding |
+
+**Threshold (configurable, default 80):** Only findings scoring >= 80 enter auto-remediation. Findings scoring 50-79 are included in the report but require explicit user opt-in for fixes. Findings below 50 are excluded from remediation entirely.
+
+**4.5d. Report validation results:**
+
+```
+## Validation Results
+- Findings received: {total from Phase 3 + Phase 4}
+- CONFIRMED: {count} (promoted to remediation)
+- PARTIAL: {count} (reclassified, promoted)
+- REFUTED: {count} (dropped — false positives)
+- Signal ratio: {confirmed + partial} / {total} ({percentage}%)
+```
+
+**GATE:** Validated finding list ready for remediation.
+
+**Phase 4.5 Summary:** Validated findings only (CONFIRMED/PARTIAL with confidence scores), signal ratio, false positive count.
+
 ---
 
 ### Phase 5 — REMEDIATE
 
-Fix all issues found in Phases 3 and 4.
+Fix validated issues from Phases 3-4, using risk-tiered autonomy. See [Remediation Protocol](references/remediation-protocol.md) for full procedure (5a-5g).
 
-**5a. Consolidate and triage findings:**
+**Key rules:**
+- **Scope guard** (5a): >7 fix ops OR >20 files OR >800 LOC delta → escalate via [Scope Guard](@~/.claude/skills/_shared/scope-guard.md)
+- **Triage** (5b): CRITICAL/HIGH/MUST_FIX → fix immediately. SHOULD_FIX → report only (never enters remediation loop)
+- **Risk tiers** (5c): LOW (auto-fix), MEDIUM (fix + show diff), HIGH (await confirmation)
+- **Max 3 iterations** (5d): fix → re-test → fix regressions. After 3: escalate to user
+- **Scope creep guard** (5e): fix touches files outside scope → ask user first
+- **Exit verification** (5f): fresh-context `agent-explore` verifies MUST_FIX/CRITICAL/HIGH fixes resolved
+- **Escalation** (5g): remaining issues → present to user with context
 
-Merge findings from Phase 2.5 (static analysis), Phase 3 (code review), and Phase 4 (security) into a single prioritized list:
-
-| Priority | Source | Action |
-|----------|--------|--------|
-| CRITICAL (security) | Phase 4 | Fix immediately |
-| HIGH (security) | Phase 4 | Fix immediately |
-| MUST_FIX (review) | Phase 3 | Fix immediately |
-| Static analysis errors | Phase 2.5 | Fix immediately |
-| MEDIUM (security) | Phase 4 | Fix recommended |
-| SHOULD_FIX (review) | Phase 3 | Fix recommended |
-| Static analysis warnings | Phase 2.5 | Fix recommended |
-| LOW/INFO/CONSIDER | Phase 3+4 | Fix if trivial, skip otherwise |
-
-Display the consolidated list to the user before fixing.
-
-**5b. Risk-tiered autonomy — classify each fix before applying:**
-
-| Risk Level | Criteria | Action |
-|------------|----------|--------|
-| **LOW risk** | Unused imports, formatting, lint fixes, dead code removal, typos | Auto-fix without confirmation |
-| **MEDIUM risk** | Logic changes, error handling improvements, missing validation, performance fixes | Fix and show the diff — proceed unless user objects |
-| **HIGH risk** | Auth/authorization changes, data access patterns, cryptography, billing logic, API contracts | Present proposed fix, wait for explicit user confirmation |
-
-**5c. Fix loop (max 3 iterations):**
-
-**Iteration 1:** Fix all CRITICAL + HIGH + MUST_FIX + static errors:
-1. Classify each fix by risk level (5b)
-2. For LOW risk: apply silently
-3. For MEDIUM risk: apply and show diff
-4. For HIGH risk: present fix, await confirmation
-5. After each fix: run the specific test/check that validates it
-6. After all fixes: re-run quality gates + static analysis
-
-**Iteration 2 (if needed):** Fix MEDIUM + SHOULD_FIX + static warnings:
-1. Same protocol: classify, fix, test, verify
-2. Re-run quality gates
-
-**Iteration 3 (if needed):** Address remaining issues or re-fix regressions:
-1. If new issues were introduced by fixes → fix them
-2. If original issues persist → escalate to user
-3. If the fix oscillates (fix A breaks B, fix B breaks A) → stop and escalate
-
-**After each iteration:**
-- Run quality gates (PRD-specified + language-specific)
-- Run tests to verify no regressions
-- Re-run static analysis to verify no new warnings introduced
-- Check that previous fixes still hold
-
-**5d. If issues persist after 3 iterations:**
-
-Stop and present remaining issues to the user:
-- What was tried
-- Why it didn't resolve
-- Whether the issue oscillates (two fixes conflict)
-- Recommended manual action
-
-**GATE:** Zero CRITICAL/HIGH/MUST_FIX issues remaining. Quality gates pass. Static analysis clean.
+**GATE:** Zero CRITICAL/HIGH/MUST_FIX issues remaining. Quality gates pass. Static analysis clean. SHOULD_FIX items reported as observations (not blocking).
 
 ---
 
 ### Phase 6 — SUMMARY
 
-Produce the final review report. This is the deliverable — no commit or push.
+Produce the final review report and update status tracking. No commit or push.
+
+**6a. Update PRD status:**
+
+If the review verdict is PASS (zero CRITICAL/HIGH remaining):
+1. Set story status: `IN_REVIEW → DONE`
+2. Set `reviewed_at` to current date (`YYYY-MM-DD`)
+3. Roll-up PRD status: if all stories are `DONE` → PRD status = `DONE`
+4. Save the updated status JSON
+
+If the review verdict is FAIL (CRITICAL/HIGH issues remain):
+- Do NOT update story status — it stays `IN_REVIEW`
+- Note in the summary that the story needs re-implementation
+
+If the status JSON does not exist (edge case), skip silently.
+
+**6b. Produce report:**
 
 ## Output Format
 
-```markdown
-## Review Report: {PRD title or Story ID}
+See [Output Format Template](references/output-format.md) for the complete Phase 6 report structure.
 
-### Executive Summary
-
-{2-3 sentences: overall verdict, critical blocking issues if any, key insight.}
-
-**Verdict:** {ALL_CLEAR | PASS_WITH_FIXES | ISSUES_REMAINING}
-**Phase results:** Intake {PASS} | Research {PASS} | Static {PASS/n warnings} | Review {PASS/FAIL} | Security {PASS/FAIL} | Remediation {PASS/PARTIAL}
-
----
-
-**Mode:** {Single Story | Full PRD}
-**Files reviewed:** {count} ({total_lines_changed} lines changed)
-**Files filtered:** {count} (lock/generated/vendor)
-**Stories reviewed:** {count}
-
-### Acceptance Criteria Validation
-
-| Story | Criterion | Status | Evidence |
-|-------|-----------|--------|----------|
-| US-001 | {criterion_1} | PASS | `file:line` |
-| US-001 | {criterion_2} | FAIL | {what's missing} |
-| US-001 | {criterion_3} | PARTIAL | {what's implemented, what's not} |
-| ... | ... | ... | ... |
-
-### Static Analysis Results
-
-- **Errors fixed:** {count}
-- **Warnings fixed:** {count}
-- **Remaining:** {count} (with justification)
-
-### Findings Summary
-
-| Category | CRITICAL | HIGH | MEDIUM | LOW |
-|----------|----------|------|--------|-----|
-| Code Review | {n} | {n} | {n} | {n} |
-| Security | {n} | {n} | {n} | {n} |
-| Static Analysis | {n} | {n} | {n} | {n} |
-| **Total** | **{n}** | **{n}** | **{n}** | **{n}** |
-
-### Issues Fixed (auto-remediated)
-
-| ID | Severity | Category | Description | Impact | File | Fix Applied |
-|----|----------|----------|-------------|--------|------|-------------|
-| C-1 | CRITICAL | security | {desc} | {why it matters} | `file:line` | {what was changed} |
-| H-1 | HIGH | correctness | {desc} | {why it matters} | `file:line` | {what was changed} |
-| ... | ... | ... | ... | ... | ... | ... |
-
-### Issues Requiring Human Review (if any)
-
-| ID | Severity | Category | Description | Impact | Proposed Fix | Why Not Auto-Fixed |
-|----|----------|----------|-------------|--------|-------------|-------------------|
-| ... | ... | ... | ... | ... | ... | {touches auth / oscillates / novel issue} |
-
-### Quality Gate Results
-
-- {gate_1}: PASS / FAIL
-- {gate_2}: PASS / FAIL
-- Cognitive complexity: {max value found} (threshold: 10 warn, 20 gate)
-- Test coverage for new code: {assessment}
-
-### Research Insights Applied
-
-- {insight_1 from Phase 2 that influenced a fix}
-- {insight_2}
-
-### Tracked for Later (out-of-scope findings)
-
-- {finding that affects code outside the diff + 1 hop scope}
-- {finding that would require architectural discussion}
-
-### Recommendations
-
-- {recommendation_1 — future improvement, not a blocking issue}
-- {recommendation_2}
-
----
-**Changes ready to commit:** {Yes — review `git diff` | No — see issues requiring human review}
 ```
+**Verdict:** {ALL_CLEAR | PASS_WITH_FIXES | ISSUES_REMAINING}
+**Phase results:** Intake ✓ | Research ✓ | Static ✓ | Review {PASS/FAIL} | Security {PASS/FAIL} | Remediation {PASS/PARTIAL}
+```
+
+Key sections: Executive Summary with verdict, Acceptance Criteria table, Validation Results (Phase 4.5 signal ratio), Findings Summary matrix, Issues Fixed table, Quality Gate Results.
+
+**GATE:** Report produced and status JSON updated.
 
 ---
 
@@ -554,74 +348,33 @@ When no story ID is provided, review the entire PRD:
 
 ## Hard Rules
 
-1. Phase 2 (RESEARCH) is MANDATORY — never review without best-practices context.
-2. Phase 2.5 (STATIC ANALYSIS) runs BEFORE AI review — catch mechanical issues cheaply first.
-3. Phases 3 and 4 run in PARALLEL — spawn both in a single message.
-4. Phase 5 has a MAX 3 ITERATIONS — escalate to user after 3 failed fix attempts.
-5. Review agents are READ-ONLY — use `agent-explore` (no Edit/Write tools).
-6. NEVER commit or push — this workflow stops after correction.
-7. Quality gates + static analysis run after EVERY fix iteration in Phase 5.
-8. Every finding must have file:line, severity, category, impact statement, and specific remediation.
-9. Acceptance criteria are checked explicitly — not assumed to pass. Cite `file:line` evidence.
-10. Agent boundaries are strict: websearch does NOT read code, explore does NOT fetch URLs.
-11. Compress research output before passing to review agents (<500 words).
-12. In full PRD mode, review ALL stories — do not skip stories that "look fine."
-13. Pre-filter generated/lock/vendor files — do NOT waste AI tokens reviewing them.
-14. Flag PRs > 500 lines — suggest chunking before proceeding.
-15. Scope to diff + 1 dependency hop — classify out-of-scope findings as "TRACKED."
-16. Target 2-4 high-value findings per file — suppress Tier 3 (style opinions, micro-optimizations).
-17. Risk-tier every fix: LOW (auto-fix), MEDIUM (fix + show diff), HIGH (await confirmation).
-18. Detect oscillating fixes (A breaks B, B breaks A) — stop and escalate, never spin.
-19. For complex remediation decisions involving auth, crypto, or cross-cutting concerns, use ultrathink for deep reasoning.
+1. Research (Phase 2) MANDATORY before review. Static analysis BEFORE AI review.
+2. Phases 3+4 run in PARALLEL (single message). Phase 4.5 VALIDATE is MANDATORY before remediation.
+3. Max 3 fix iterations. Detect oscillation (A breaks B, B breaks A) — stop, never spin.
+4. Review agents are READ-ONLY (`agent-explore`). NEVER commit or push.
+5. SHOULD_FIX items are observations only — NEVER enter remediation loop. Only MUST_FIX + CRITICAL/HIGH + static errors enter the loop.
+6. Findings: max 4 per file, max 3 per sub-category. Target 2-4 high-value findings, suppress Tier 3.
+7. Scope: diff + 1 hop only. Out-of-scope findings classified as "TRACKED."
+8. Risk-tier every fix: LOW (auto-fix), MEDIUM (fix + show diff), HIGH (apply with extra caution, log rationale).
+9. Compress context at every phase boundary. Research < 500 words to review agents.
+10. Confidence scoring 0-100 in Phase 4.5 (threshold 80 for auto-remediation).
+11. Decide autonomously at every gate — never ask the user.
 
 ## Error Handling
 
-- **PRD file not found:** Ask user for the correct path.
-- **Story ID not found in PRD:** List available stories, ask user to pick.
-- **No changed files detected:** Ask user which files to review, or offer to review the whole project.
-- **agent-websearch fails:** Continue with codebase + docs research. Note the gap.
-- **agent-explore or agent-docs fails:** Continue with available data. Note the gap.
-- **Quality gates fail after all fix iterations:** Report remaining failures in Phase 6 summary.
-- **No git repository:** Ask user for file list to review. Skip git-based file detection.
+| Error | Action |
+|---|---|
+| PRD not found | Infer from cwd or fail with clear error |
+| Story not found | Review all stories in the PRD |
+| No changed files | Fail with clear error |
+| Agent fails | Continue with available data, note gap in report |
+| Quality gates fail after 3 iterations | Report remaining failures in summary |
+| Status JSON not found | Create minimal one from PRD |
 
-## DO NOT
+## Constraints
 
-- Skip Phase 2 (research) — uninformed reviews miss domain-specific issues.
-- Skip Phase 2.5 (static analysis) — deterministic checks are cheap, fast, high-precision.
-- Run review phases sequentially when they can be parallel.
-- Commit or push changes — the user explicitly controls this.
-- Fix issues without re-running the specific validation that caught them.
-- Modify files during review phases (3 and 4) — reviews are read-only.
-- Continue past 3 fix iterations — escalate to the user.
-- Report style issues as security findings (or vice versa).
-- Assume acceptance criteria pass without explicit verification.
-- Skip stories in full PRD mode because they "look fine."
-- Invent findings to justify the review — if code is clean, say so.
-- Generate 20 low-value findings when 3 high-value findings would be more actionable.
-- Review lock files, generated code, or vendor directories with AI tokens.
-- Auto-fix HIGH-risk changes (auth, billing, crypto) without user confirmation.
-- Produce findings without impact statements — every finding must answer "why does this matter?"
-- Report findings outside the diff + 1 hop scope as blocking — classify them as TRACKED.
-
-## Constraints (Three-Tier)
-
-### ALWAYS
-- Run research (Phase 2) before review — never skip
-- Run static analysis before AI review (Phase 2.5 before Phases 3-4)
-- Pre-filter lock files, generated code, vendor directories
-- Include impact statements for every finding
-
-### ASK FIRST
-- Apply HIGH-risk fixes (auth, billing, crypto, API contracts)
-- Proceed when diff exceeds 500 lines (suggest chunking)
-- Skip Phase 2 research (only if user explicitly requests)
-
-### NEVER
-- Commit or push — this workflow stops after correction
-- Modify files during review phases (3 and 4)
-- Auto-fix HIGH-risk changes without user confirmation
-- Continue past 3 fix iterations — escalate to user
-- Generate 20 low-value findings when 3 would be more actionable
+- **ALWAYS:** Research before review. Static analysis before AI review. Validate findings (Phase 4.5) before remediation. Compress context at phase boundaries. Enforce output budgets: 1,000 tok (websearch/explore), 800 tok (docs), 1,500 tok (review/security). Pre-filter lock/generated/vendor files. Update status JSON. Decide autonomously — never ask the user.
+- **NEVER:** Commit or push. Modify files during review phases (3+4). Remediate unverified findings. Auto-fix below 80 confidence. Continue past 3 iterations. Ask the user questions (AskUserQuestion).
 
 ## Done When
 
@@ -629,15 +382,20 @@ When no story ID is provided, review the entire PRD:
 - [ ] Research completed with best-practices brief (Phase 2)
 - [ ] Static analysis run and results collected (Phase 2.5)
 - [ ] Code review and security audit completed in parallel (Phases 3-4)
+- [ ] All findings verified with file:line evidence (Phase 4.5)
 - [ ] All CRITICAL/HIGH/MUST_FIX issues remediated (Phase 5)
 - [ ] Quality gates pass and static analysis clean
 - [ ] Executive summary report produced (Phase 6)
+- [ ] Status JSON updated (story → DONE if PASS, unchanged if FAIL)
 - [ ] No commit or push performed — changes ready for user review
 
 ## References
 
-- [Review Protocols](references/review-protocols.md) — exact Agent tool parameters, prompt templates, and expected output formats for each phase
-- [Agent Boundaries](@~/.claude/skills/_shared/agent-boundaries.md) — shared agent delegation rules, call budgets, authority hierarchy
-- [Scope Guard](@~/.claude/skills/_shared/scope-guard.md) — shared threshold definitions and escalation protocol
-- [Synthesis Template](@~/.claude/skills/_shared/synthesis-template.md) — standardized format for research synthesis output
-- [Three-Tier Constraints](@~/.claude/skills/_shared/three-tier-constraints.md) — ALWAYS/ASK FIRST/NEVER model
+- [Review Protocols](references/review-protocols.md) — exact Agent tool parameters, prompt templates, validation protocol, and expected output formats for each phase
+- [Output Format](references/output-format.md) — Phase 6 summary report template with all tables and sections
+- [Static Analysis Protocol](references/static-analysis-protocol.md) — language-specific linter/formatter commands, type checking, git blame hotspots, risk hypotheses
+- [Remediation Protocol](references/remediation-protocol.md) — scope guard, triage table, risk-tiered autonomy, fix loop, exit verification
+- [Agent Boundaries](@~/.claude/skills/_shared/agent-boundaries.md) — shared agent delegation rules, call budgets
+- [Scope Guard](~/.claude/skills/_shared/scope-guard.md) — threshold definitions and escalation protocol
+- [Synthesis Template](~/.claude/skills/_shared/synthesis-template.md) — research synthesis output format
+- [Three-Tier Constraints](~/.claude/skills/_shared/three-tier-constraints.md) — ALWAYS/NEVER model

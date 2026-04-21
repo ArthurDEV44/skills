@@ -1,4 +1,15 @@
-# Brainstorm Protocols — Agent Prompts and Question Patterns
+# Brainstorm Protocols — Agent Prompts, Question Templates, and Validation
+
+This file is the single source of truth for all templates used by `/write-prd`. SKILL.md orchestrates; this file provides the content.
+
+## Table of Contents
+
+- [Phase 2 — Agent Prompts](#phase-2--agent-prompts)
+- [Phase 3 — Question Templates](#phase-3--research-informed-question-patterns)
+- [PRD Self-Validation Checklist](#prd-self-validation-checklist-phase-5c)
+- [Compressed Research Summary Format](#compressed-research-summary-format)
+
+---
 
 ## Phase 2 — Agent Prompts
 
@@ -34,7 +45,7 @@ Research the following domain to inform a Product Requirements Document.
 - Search for "{feature_type} implementation guide"
 - Search for "{feature_type} security considerations OWASP"
 - Search for "{feature_type} common mistakes"
-- Include year 2025-2026 in searches
+- Include recent year in searches for freshness
 
 ## Output Requirements
 Return findings in this structure:
@@ -73,7 +84,7 @@ Explore the codebase to understand the current architecture and constraints for 
 {user_feature_description}
 
 ## Research Context
-{compressed_web_research — max 500 words}
+{compressed_web_research}
 
 ## Exploration Tasks
 1. Identify the project's tech stack, framework, and architecture pattern
@@ -128,9 +139,15 @@ We're PLANNING a feature, not implementing yet. Look up:
 3. Limitations or known issues that would affect our design
 4. Configuration or setup requirements we should plan for
 
+## ctx7 CLI Protocol
+Two-step process via Bash:
+1. bunx ctx7@latest library {library_name} "{query}"  — resolve library ID
+2. bunx ctx7@latest docs {library_id} "{query}"       — fetch documentation
+
 ## Important
-- Context7 two-step: resolve-library-id first, then query-docs
-- Maximum 3 Context7 calls
+- Use ctx7 CLI two-step protocol: library first, then docs
+- Maximum 3 ctx7 calls total (cost/time budget — prioritize the most relevant libraries)
+- Do NOT modify any files — this is read-only research
 - Focus on design-relevant information, not implementation details
 ```
 
@@ -152,15 +169,7 @@ Based on our research, [specific finding].
    D. Other: [describe]
 ```
 
-**NEVER ask:**
-- "What do you want to build?" (too vague)
-- "How should we handle auth?" (not informed by research)
-- "Do you want feature X?" (binary, no context)
-
-**ALWAYS ask:**
-- "Research shows Competitor A uses OAuth2 while Competitor B uses magic links. Which approach fits your users better?"
-- "The industry standard for {domain} includes {X, Y, Z}. Which are must-haves?"
-- "Our research found that {risk} is the #1 failure mode. How do you want to mitigate it?"
+**NEVER ask** vague, ungrounded questions ("What do you want to build?", "How should we handle auth?"). **ALWAYS** trace each option to a research finding.
 
 ---
 
@@ -289,14 +298,14 @@ Additional scoping questions:
 
 ---
 
-### Edge Cases & Error States Round (MANDATORY — Phase 3e)
+### Edge Cases & Error States Round (Phase 3e)
 
-**Purpose:** Systematically identify unhappy paths BEFORE scoping stories. Research shows edge case defects cost 50-100x more to fix post-launch (Standish Group CHAOS).
+**Purpose:** Systematically identify unhappy paths BEFORE scoping stories. Evidence directionally supports that earlier defect discovery reduces cost significantly (Boehm 1981, NIST 2002).
 
 ```markdown
 Before we scope the stories, let's identify which edge cases and error states matter for {feature}.
 
-Research shows these 10 categories are the most commonly missed:
+These 10 categories are the most commonly missed:
 
 | # | Category | Example for {feature} | Relevant? |
 |---|----------|----------------------|-----------|
@@ -321,12 +330,11 @@ Which categories apply to your feature?
 **Rules:**
 - Always provide feature-specific examples, not generic descriptions
 - Mark categories that research identified as high-risk for this domain
-- For each relevant category, decide: dedicated story or acceptance criteria on existing story
 - Every story must end up with at least one unhappy-path acceptance criterion
 
 ---
 
-### Quality Gates Round (MANDATORY — Phase 3f)
+### Quality Gates Round (Phase 3f)
 
 ```markdown
 Final essential question — what quality commands must pass for every story?
@@ -351,7 +359,7 @@ Final essential question — what quality commands must pass for every story?
 
 ---
 
-### Devil's Advocate Round (MANDATORY before closing — Phase 3h)
+### Devil's Advocate Round (Phase 3h)
 
 ```markdown
 Before we finalize the scope, our research flagged these concerns:
@@ -379,7 +387,7 @@ Before we finalize the scope, our research flagged these concerns:
 
 ## PRD Self-Validation Checklist (Phase 5c)
 
-Run through this checklist BEFORE saving the PRD. Every item must pass.
+The single source of truth for PRD quality gates. Think step-by-step through each item. For each: cite the specific PRD section that satisfies it. If you cannot cite a section, the check FAILS.
 
 ```markdown
 ### Pre-Save Validation
@@ -402,16 +410,16 @@ Run through this checklist BEFORE saving the PRD. Every item must pass.
 | 14 | Technical Considerations framed as questions for engineering input, not mandates | |
 | 15 | Changelog section present with initial version entry | |
 
-If any check fails → fix before saving. Do not present an incomplete PRD to the user.
+If any check fails → fix before saving.
 ```
 
-**The simplest quality test (from research):** Would two engineers, reading this PRD independently, build the same thing? If the answer is no, the PRD is not ready.
+**The simplest quality test:** Would two engineers, reading this PRD independently, build the same thing? If no, the PRD is not ready.
 
 ---
 
 ## Compressed Research Summary Format
 
-When passing Phase 2 output to Phase 3 questions, use this internal format:
+Internal format for passing Phase 2 output to Phase 3. Store after Phase 2c synthesis. Target: < 300 words internal, < 500 words when presented to user.
 
 ```markdown
 ## Research Brief
@@ -438,5 +446,3 @@ When passing Phase 2 output to Phase 3 questions, use this internal format:
 - {Feature 2}
 - {Feature 3}
 ```
-
-Target: <500 words for internal use. Full details available for user on request.

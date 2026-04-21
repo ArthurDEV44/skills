@@ -4,7 +4,7 @@
 
 - [Agent Spawning Protocol](#agent-spawning-protocol)
 - [Step 3: agent-explore Prompt Template](#step-3-agent-explore-prompt-template)
-- [Step 4: agent-docs Prompt Template](#step-4-agent-docs-prompt-template)
+- [Step 4: docs agent Prompt Template (ctx7 CLI)](#step-4-docs-agent-prompt-template-ctx7-cli)
 - [Step 5: agent-websearch Prompt Template](#step-5-agent-websearch-prompt-template)
 - [Parallel Spawning](#parallel-spawning)
 - [Output Processing](#output-processing)
@@ -95,7 +95,7 @@ Return your findings with file:line references for every claim. Structure your o
 
 ---
 
-## Step 4: agent-docs Prompt Template
+## Step 4: docs agent Prompt Template (ctx7 CLI)
 
 ### Agent Tool Parameters
 
@@ -103,20 +103,26 @@ Return your findings with file:line references for every claim. Structure your o
 Agent(
   description: "Check docs for {library}",
   prompt: <template below>,
-  subagent_type: "agent-docs"
+  subagent_type: "general-purpose"
 )
 ```
 
 ### Prompt Template
 
 ```
-Look up official documentation to verify correct API usage for the code involved in the following error.
+Look up official documentation using the ctx7 CLI to verify correct API usage for the code involved in the following error.
+This is a READ-ONLY research task. Do NOT modify any files.
 
 ## Error Context
 {triage_report}
 
 ## Libraries to Check
 {library_names_with_versions}
+
+## ctx7 CLI Protocol
+Two-step process via Bash:
+1. bunx ctx7@latest library {library_name} "{query}"  — resolve library ID
+2. bunx ctx7@latest docs {library_id} "{query}"       — fetch documentation
 
 ## Documentation Focus
 
@@ -129,10 +135,12 @@ Look up official documentation to verify correct API usage for the code involved
 4. **Required setup or configuration**: Check if there are initialization steps, feature flags, or configuration requirements that must be met for the API to work correctly.
 
 ## Important
-- Use the Context7 two-step protocol: resolve-library-id first, then query-docs.
-- Maximum 3 Context7 calls total. Plan queries carefully.
+- Use ctx7 CLI two-step protocol: library first, then docs.
+- Maximum 3 ctx7 calls total. Plan queries carefully.
+- Do NOT modify any files — this is read-only research.
 - Focus on the specific APIs mentioned in the error — do not provide general library overviews.
 - If a version is specified, prioritize version-specific documentation.
+- If a regression was detected and a bug-inducing commit diff is available, include it in your analysis of whether the API usage changed.
 
 ## Output Requirements
 
@@ -190,6 +198,9 @@ Codebase investigation and documentation lookup did not resolve this error. The 
 3. **Community solutions**: Search Stack Overflow and developer forums for this error with validated solutions.
 4. **Known bugs**: Check if this is a documented bug with a patch, workaround, or version fix.
 
+## Important
+- Maximum 8 search tool calls. Prioritize: exact error search → GitHub issues → Stack Overflow. Stop when a HIGH confidence solution is found.
+
 ## Search Queries to Run
 - "{exact_error_message}" {library_name}
 - {library_name} {error_code_if_any} site:github.com/issues
@@ -238,7 +249,7 @@ Agent(
 Agent(
   description: "Check docs for {library}",
   prompt: <Step 4 prompt with triage report>,
-  subagent_type: "agent-docs"
+  subagent_type: "general-purpose"
 )
 ```
 
@@ -252,7 +263,7 @@ If only one step is applicable (e.g., codebase exists but no library identified)
 
 ### Combining Agent Outputs
 
-After all agents complete, merge their findings for Step 6:
+After all agents complete, merge their findings for Step 6. For the full synthesis protocol (evidence hierarchy, conflict resolution, deduplication rules), see `@~/.claude/skills/_shared/synthesis-template.md`.
 
 **Evidence hierarchy** (when agents provide conflicting information):
 1. Official docs (Step 4) — highest authority for API correctness
@@ -301,4 +312,4 @@ The orchestrator (main Claude session) handles:
 14. **Codify regression test** — suggest a test that guards against the specific bug
 15. **Report results** — present diagnosis, fix, verification, and prevention to user
 
-The orchestrator NEVER duplicates agent work. It does not explore the codebase, query Context7, or search the web itself. It only orchestrates, synthesizes, and applies fixes.
+The orchestrator NEVER duplicates agent work. It does not explore the codebase, run ctx7 CLI, or search the web itself. It only orchestrates, synthesizes, and applies fixes.

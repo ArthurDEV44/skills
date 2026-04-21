@@ -304,6 +304,33 @@ AI navigation is always: logo left, links center, CTA right, full-width bar with
    }
    ```
 
+## Anchor Positioning (CSS-Only Tooltips & Popovers)
+
+CSS Anchor Positioning (baseline 2026) replaces JavaScript positioning for tooltips,
+dropdowns, and popovers. Use it instead of Floating UI or Popper.js.
+
+```css
+/* Define the anchor */
+.trigger {
+  anchor-name: --tooltip-anchor;
+}
+
+/* Position the tooltip relative to its anchor */
+.tooltip {
+  position: fixed;
+  position-anchor: --tooltip-anchor;
+  top: anchor(bottom);
+  left: anchor(center);
+  translate: -50% 8px;
+
+  /* Auto-flip if not enough space below */
+  position-try-fallbacks: flip-block;
+}
+```
+
+This eliminates the need for JavaScript positioning libraries in most tooltip and
+popover use cases. Use `position-try-fallbacks` for automatic overflow handling.
+
 ## The Override Checklist
 
 Before finishing implementation, verify these shadcn defaults have been intentionally addressed:

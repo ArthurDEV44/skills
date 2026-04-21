@@ -1,4 +1,5 @@
 ---
+model: opus
 name: skill-creator
 description: >
   Interactive guide for creating new skills (or updating existing skills) that extend Claude's
@@ -7,6 +8,7 @@ description: >
   asks to create a new skill, build a skill, update an existing skill, says "skill-creator",
   "create a skill for", "build a skill that", or wants help designing skill structure and content.
   Do NOT use for general prompting questions or non-skill configuration tasks.
+argument-hint: "[skill-name-or-description]"
 ---
 
 # Skill Creator
@@ -188,3 +190,28 @@ Before considering a skill complete, verify:
 - [ ] Examples provided
 - [ ] References clearly linked
 - [ ] No README.md inside skill folder (all docs go in SKILL.md or references/)
+
+## Done When
+
+- [ ] SKILL.md file created with valid YAML frontmatter
+- [ ] `name` and `description` fields are present and well-formed
+- [ ] Instructions are clear, actionable, and follow step-by-step structure
+- [ ] Reference files created in `references/` for detailed content
+- [ ] Validation checklist above passes (all items checked)
+
+## Constraints (Three-Tier)
+
+### ALWAYS
+- Verify frontmatter has `name` and `description` fields
+- Keep SKILL.md under 5,000 words — move details to `references/`
+- Include error handling with specific solutions
+- Link reference files clearly from SKILL.md
+
+### ASK FIRST
+- Overwrite an existing skill with the same name
+- Create skills that overlap with existing skill functionality
+
+### NEVER
+- Create a README.md inside a skill folder — use SKILL.md or references/
+- Use XML tags (< >) in frontmatter description
+- Create skills with spaces or uppercase in the name

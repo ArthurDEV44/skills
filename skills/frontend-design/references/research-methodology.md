@@ -3,6 +3,8 @@
 Phase 0 research is MANDATORY. The quality of the final design depends directly on the quality
 of research conducted before any code is written.
 
+> These templates are starting points. Adapt the search terms to the user's specific brief — a generic research query produces generic design.
+
 ## How to Research
 
 Launch an `agent-websearch` subagent with a query built from the templates below.
@@ -12,7 +14,7 @@ The query MUST be specific to the user's product type, not generic.
 
 ### SaaS / Dashboard / Internal Tool
 ```
-Research the best-designed SaaS dashboards and data-heavy web applications in 2025-2026.
+Research the best-designed SaaS dashboards and data-heavy web applications from recent years.
 Look at:
 1. Awwwards SOTD winners in the SaaS/dashboard category
 2. Linear, Raycast, Arc Browser, Notion — what specific design techniques do they use?
@@ -26,7 +28,7 @@ Extract specific: font names, hex/OKLCH color values, border-radius values, spac
 
 ### Landing Page / Marketing Site
 ```
-Research the most distinctive landing pages and marketing sites from 2025-2026.
+Research the most distinctive landing pages and marketing sites from recent years.
 Look at:
 1. Awwwards SOTD winners in the corporate/startup category
 2. Framer template best-sellers — what visual patterns make them premium?
@@ -40,7 +42,7 @@ Extract specific: font pairings, color values, section padding values, grid stru
 
 ### E-commerce / Product Page
 ```
-Research the best-designed e-commerce sites and product pages in 2025-2026.
+Research the best-designed e-commerce sites and product pages from recent years.
 Look at:
 1. Luxury brand sites: Cartier, Aesop, COS, Acne Studios, Maison Margiela
 2. DTC brands with exceptional web presence
@@ -54,7 +56,7 @@ Extract specific: image treatment CSS, grid column structures, card styling appr
 
 ### Portfolio / Personal Site / Creative
 ```
-Research the most creative personal portfolios and creative sites from 2025-2026.
+Research the most creative personal portfolios and creative sites from recent years.
 Look at:
 1. Awwwards SOTD winners in the portfolio category
 2. Bruno Simon, Lynn Fisher, Gianluca Gradogna — what makes their work feel human?
@@ -68,17 +70,38 @@ Extract specific: animation approaches (if requested), typographic treatments, c
 
 ### Blog / Editorial / Content Site
 ```
-Research the best-designed editorial and content websites in 2025-2026.
+Research the best-designed editorial and content websites from recent years.
 Look at:
 1. Award-winning magazine sites: Kinfolk, Monocle, The Outline (archived), Bloomberg
 2. Long-form journalism sites with exceptional reading experience
-3. Swiss/International Style applied to web — what does that look like in 2025?
+3. Swiss/International Style applied to web — what does that look like currently?
 4. Drop caps, pull quotes, margin notes — editorial micro-patterns on the web
 5. Typography-forward sites on typewolf.com
 Focus on: reading experience, article layout variations, typographic rhythm, image placement
 within long text, sidebar annotations, progressive disclosure of content.
 Extract specific: text column widths, line-height values, paragraph spacing, font choices.
 ```
+
+### Custom Query Construction
+
+When the user's product doesn't match any of the 5 predefined categories above, construct a query dynamically:
+
+```
+Research the best-designed [PRODUCT_TYPE] websites and applications.
+Look at:
+1. Award winners in the [CATEGORY] space
+2. Industry leaders in [VERTICAL] — what specific design techniques make them stand out?
+3. Current typography and color trends for [VERTICAL]
+4. Specific creative agency work relevant to [BRIEF]
+Focus on: [RELEVANT_DESIGN_DIMENSIONS].
+Extract specific: font names, OKLCH color values, layout structures.
+```
+
+Every custom query should include these four dimensions regardless of product type:
+- **Industry-specific references** — real sites/brands in the user's vertical, not generic inspiration
+- **Typography tokens** — actual font names, weights, sizes observed in reference sites
+- **Color tokens** — concrete OKLCH values, not "warm palette" or "modern colors"
+- **One non-web constraint** — a physical/analog design reference that anchors the aesthetic
 
 ## What to Extract from Research
 

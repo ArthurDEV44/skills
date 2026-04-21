@@ -1,470 +1,364 @@
-# Workflow Engine — meta-code Execution Specification
+# Workflow Engine — Single Source of Truth
 
-## Pattern Classification
+Decision tables, scoring formulas, credibility tiers, invariant validation, error handling, and performance characteristics for the meta-code pipeline. For the pipeline overview and step descriptions, see [SKILL.md](../SKILL.md).
 
-meta-code implements an **Adaptive Pipeline + Fan-out/Fan-in hybrid** with quality gates:
-- **Classifier**: Step 0 determines pipeline depth and whether to decompose.
-- **Pipeline**: Step 2 (RESEARCH) must complete before Steps 3-4 start.
-- **Fan-out**: Steps 3 (EXPLORE) and 4 (DOCUMENT) run in parallel.
-- **Fan-in**: Step 5 (SYNTHESIZE) aggregates all results.
-- **Quality Gate**: Step 6 (VERIFY) evaluates completeness and triggers refinement.
-- **Refinement Loop**: Step 7 (REFINE) runs at most once for targeted gap-filling.
+## Classification Decision Table (Step 1a)
 
-This combines Anthropic's "Prompt Chaining" pattern (Step 2 → 3/4) with "Parallelization — Sectioning" (Steps 3 and 4) and "Evaluator-Optimizer" (Steps 6-7).
-
-## Step 0: CLASSIFY — Query Analysis
-
-**Always executes first. No conditions. No agent spawning — orchestrator-only.**
-
-**Purpose:** Assess query complexity to determine pipeline depth and whether to decompose into sub-questions.
-
-### Classification Logic
-
-Evaluate the query along these dimensions:
-1. **Concept count**: How many distinct technical concepts does it involve?
-2. **Hop count**: How many reasoning steps are needed? (single lookup vs. chain of lookups)
-3. **Scope**: Single library/file vs. cross-cutting architectural concern
-4. **Decision type**: Factual lookup vs. comparison vs. design decision
-
-### Classification Decision Table
+Evaluated at Step 1a. Assign the **highest matching level** across all dimensions.
 
 | Dimension | simple | moderate | complex |
 |-----------|--------|----------|---------|
 | Concepts | 1 | 2-3 | 4+ |
-| Hops | 1 (direct answer) | 2 (lookup + apply) | 3+ (multi-hop reasoning) |
-| Scope | Single library/API | Component or feature | Cross-cutting / architectural |
+| Hops | 1 (direct answer) | 2 (lookup + apply) | 3+ (multi-hop) |
+| Scope | Single library/API | Component/feature | Cross-cutting / architectural |
 | Decision | Factual | How-to with context | Trade-off analysis |
 
-**Assign the highest matching level.** If any dimension is `complex`, the query is complex.
+## Pipeline Behavior by Level
 
-### Pipeline Behavior by Level
+| Level | Steps Executed | Decomposition | Challenge | Evaluator | Refinement | Topology |
+|-------|---------------|---------------|-----------|-----------|------------|----------|
+| `simple` | 0, 1, 2, 3(fast), 5(lite), 9 — or 3→4 if library detected | No | Never | Never | Never | 1 agent (websearch) |
+| `moderate` | 0-9 | Entity tagging | Signal-conditional (contested claims or low confidence) | No (self-check) | Max 1 if verify < 0.75 | 2-3 agents (websearch + explore/docs) |
+| `complex` | All 0-9 | Constraint-based | Yes | Yes (independent) | Max 1 if verify < 0.75, max 2 if verify < 0.5 | 3-5 agents (2x websearch + explore/docs + evaluator) |
 
-| Level | Decomposition | Steps Executed | Refinement |
-|-------|--------------|----------------|------------|
-| `simple` | No | 0, 1, 2, (4 if library), 5, 8 | Never |
-| `moderate` | No | 0, 1, 2, 3, 4, 5, 6, (7 if needed), 8 | If verify < 0.75 |
-| `complex` | Yes (2-4 sub-questions) | All steps | If verify < 0.75 |
+### Dynamic Topology Notes
 
-### Decomposition Format (complex only)
+The topology column reflects agent COUNT, not just which steps run:
+- **Simple:** Only agent-websearch. If early-exit triggers, no further agents. If a library is detected, add agent-docs (max 2 agents).
+- **Moderate:** agent-websearch + conditional explore/docs. Standard 2-3 agent topology. Self-check at Step 7.
+- **Complex:** 2x parallel agent-websearch (supportive + critical angles) at Step 2 + conditional explore/docs at Step 4 + independent evaluator at Step 7. Max 5 agents total.
+
+## Early-Exit Conditions (Step 3d)
+
+After Step 3 boundary check, if ALL of the following are true, skip Step 4 and go directly to Step 5:
+
+1. `query_coverage: high` — web research addressed all key aspects
+2. All `must_answer` items from Step 1 are addressed by T1-T2 sources
+3. No libraries identified in the handoff `libraries` field needing docs lookup
+4. No codebase detected (or query is purely conceptual — not about local code)
+
+**When NOT to early-exit:** If `must_include` contains `code_example` and the codebase exists, always run Step 4 EXPLORE to ground examples in actual project patterns.
+
+### Simple Fast-Path
+
+For `simple` queries that trigger early-exit, apply additional streamlining:
+- **Step 3 (GATE)**: Skip 3b boundary check and 3c route detection. Only run 3a compress + 3d early-exit check.
+- **Step 5 (SYNTHESIZE)**: Skip 5f-5j (deduplication, contradiction surfacing, input coverage, confidence scoring, citation audit) — these are unnecessary when only one agent contributed.
+- **Step 7 (VERIFY)**: Skip entirely — go directly from Step 5 to Step 9.
+
+This reduces simple queries to: 0 → 1 → 2 → 3(fast) → 5(lite) → 9. Target: 15-25s total.
+
+## Query Decomposition (Step 1c)
+
+### Moderate queries — Entity tagging
 
 ```
-Sub-questions for: "{original_question}"
-
-sq_001: {sub-question text}
-  target_agent: websearch | explore | docs
-  depends_on: []
-  priority: 1
-
-sq_002: {sub-question text}
-  target_agent: websearch
-  depends_on: [sq_001]
-  priority: 2
-
-sq_003: {sub-question text}
-  target_agent: docs
-  depends_on: []
-  priority: 1
+sq_001: {question} | target: websearch | entities: [known: X, unknown: Y] | depends_on: [] | priority: 1
+sq_002: {question} | target: docs     | entities: [known: X, unknown: Z] | depends_on: [] | priority: 1
 ```
 
-Rules:
-- Maximum 4 sub-questions. If more are needed, the question should be split by the user.
-- Independent sub-questions (empty `depends_on`) run in parallel.
-- Dependent sub-questions wait for upstream results, which are prepended to their prompts.
-- Priority 1 = critical to answering the question. Priority 3 = supplementary.
+Tag each entity as `known` (user-specified) or `unknown` (to be retrieved). Independent sub-questions run in parallel.
 
----
+### Complex queries — Constraint-based decomposition
 
-## Step 1: CACHE CHECK — Memory Retrieval
-
-**Always executes. No agent spawning.**
-
-**Purpose:** Check persistent memory for prior research that could supplement or replace agent calls.
-
-### Execution Logic
-
-1. Check if a memory directory exists for the current project (`~/.claude/projects/*/memory/`).
-2. If it exists, read `MEMORY.md` index.
-3. Scan for `reference` type entries whose description matches the query topic.
-4. If matching entries found, read them and assess:
-   - **Freshness**: Is the entry < 7 days old? (check retrieval date in content)
-   - **Relevance**: Does it directly address the query or a sub-question?
-   - **Confidence**: Was the original finding marked as high confidence?
-
-### Decision
-
-| Condition | Action |
-|-----------|--------|
-| Fresh + relevant + high confidence | Use as primary source, skip corresponding agent |
-| Stale OR medium confidence | Use as supplementary context, still run agents |
-| No matching entries | Proceed normally |
-| No memory directory | Skip step, proceed |
-
----
-
-## Step 2: RESEARCH (agent-websearch)
-
-**Always executes. No conditions.**
-
-**Purpose:** Establish external context — current best practices, recent changes, ecosystem landscape, relevant articles.
-
-**Input:** The user's question (or sub-questions for `complex` queries), reformulated as 1-3 web search queries.
-
-**Query reformulation rules:**
-1. Extract the core technical topic from the user's question.
-2. Add specificity: include language, framework, version if mentioned.
-3. Add currency: include current year for time-sensitive topics.
-4. For broad questions, craft 2-3 complementary queries covering different angles.
-5. For `complex` queries: generate searches that cover each `websearch`-targeted sub-question.
-
-**Output extraction — pass downstream as compressed summary (<500 words):**
-- Key findings (numbered list, max 8 items)
-- Library/framework names mentioned (used to trigger Step 4)
-- Version numbers found
-- Best practice recommendations
-- Notable URLs for citation
-- **Contradictions detected** — any conflicting claims across different sources
-
-**Timeout:** 60 seconds. If timeout, proceed with empty research context.
-
----
-
-## Step 3: EXPLORE (agent-explore) — Conditional
-
-**Condition:** A codebase must exist in the current working directory.
-
-**Detection logic** (run by the orchestrator BEFORE spawning):
-```
-Check for any of these files in the current working directory:
-- Cargo.toml
-- package.json
-- pyproject.toml
-- go.mod
-- pom.xml
-- build.gradle / build.gradle.kts
-- *.sln / *.csproj
-- Makefile / CMakeLists.txt
-- composer.json
-- mix.exs
-- deno.json / deno.jsonc
-- .git/ (fallback — if a git repo exists, there's likely a project)
-```
-
-If NONE found: Skip Step 3. Set `codebase_context = "No codebase detected in current directory."`.
-
-**Input:** User's question + Step 2 research summary (to guide what to look for in the codebase).
-
-**Exploration focus:**
-- How the user's question relates to existing code
-- Relevant files, functions, types, patterns
-- Current architecture and conventions that affect the answer
-- Existing implementations of similar functionality
-
-**Required output fields:**
-- Findings with file:line references
-- `contradictions[]`: any conflicts between codebase patterns and web research recommendations
-
-**Timeout:** 90 seconds. If timeout, proceed with whatever partial results were returned.
-
----
-
-## Step 4: DOCUMENT (agent-docs) — Conditional
-
-**Condition:** Specific libraries or frameworks must be identified from Step 2 output or from codebase detection.
-
-**Library extraction logic:**
-1. From Step 2 research summary: extract any library/framework names explicitly mentioned as relevant to the answer.
-2. From codebase manifest (if Step 3 also runs): extract dependency names that relate to the user's question.
-3. If neither source yields library names: Skip Step 4. Set `docs_context = "No specific library documentation needed."`.
-
-**Max libraries per invocation:** 2 (due to the 3-call Context7 limit).
-
-**Input:** User's question + library names + version information (from codebase if available).
-
-**Required output fields:**
-- API details, code examples, version notes
-- `contradictions[]`: any conflicts between documentation and web research claims
-
-**Timeout:** 45 seconds. If timeout, proceed with whatever partial results were returned.
-
----
-
-## Step 5: SYNTHESIZE (orchestrator)
-
-**Always executes. Waits for all active agents to complete.**
-
-**Input:** All agent outputs (Step 2 always, Step 3 if codebase existed, Step 4 if libraries identified), plus cached findings from Step 1.
-
-### Synthesis Rules
-
-1. **Conflict resolution priority:**
-   - Official documentation (Step 4) > Web research (Step 2) > Codebase patterns (Step 3)
-   - Exception: if the codebase has an intentional deviation from docs (e.g., custom wrapper), note BOTH approaches.
-
-2. **Deduplication:**
-   - If Steps 2 and 4 both found the same documentation, use Step 4's version (more structured).
-   - If Steps 2 and 3 both describe the same pattern, cite the codebase file:line reference (more specific).
-
-3. **Grounding:**
-   - Every claim must trace to a source (URL, file:line, or Context7 library ID).
-   - If a recommendation cannot be sourced, mark it as "Based on general best practices."
-
-4. **Contradiction surfacing (NEW):**
-   - Do NOT silently resolve contradictions.
-   - Apply triangulation threshold: if 2+ of 3 independent sources agree on a claim → mark as "corroborated."
-   - If sources disagree → list each position with its source in the `Contested Claims` output section.
-   - Contradictions from agent outputs (`contradictions[]` fields) are surfaced here.
-
-5. **Confidence scoring (NEW):**
-   Compute confidence based on these signals:
-
-   | Signal | Weight |
-   |--------|--------|
-   | Number of concordant sources | High |
-   | Source authority (official docs > blogs > forums) | High |
-   | Source recency (current year > 2+ years old) | Medium |
-   | Coverage (all sub-questions answered) | Medium |
-   | Presence of unresolved contradictions | Negative |
-   | Agent failures or timeouts | Negative |
-
-   Assign level:
-   - `high`: 3+ concordant authoritative sources, no unresolved contradictions, full coverage
-   - `medium`: 2 sources or mixed authority, minor gaps
-   - `low`: single source, significant gaps, or unresolved contradictions
-
-6. **Code examples:**
-   - If Step 3 found relevant existing code AND Step 4 found documentation examples, present the documentation example adapted to the project's conventions.
-   - If only Step 4 has examples, present them as-is with a note about adapting to project conventions.
-   - If only Step 2 has code snippets, present them with caveats about verifying correctness.
-
-7. **Gap identification (for verify step):**
-   - Track which sub-questions (if decomposed) are fully answered, partially answered, or unanswered.
-   - Track which claims lack corroboration.
-
----
-
-## Step 6: VERIFY (Quality Gate)
-
-**Always executes after synthesis. Orchestrator-only — no agent spawning.**
-
-**Purpose:** Evaluate synthesis quality and decide whether refinement is needed.
-
-### Completeness Scoring (0.0 to 1.0)
-
-Score components:
-- **Question coverage** (0.4 weight): Does the answer address the full question? For decomposed queries, what fraction of sub-questions are answered?
-- **Source backing** (0.3 weight): What fraction of claims have source citations?
-- **Actionability** (0.2 weight): Does the answer include concrete next steps or code examples?
-- **Coherence** (0.1 weight): Is the answer internally consistent? Are contradictions properly surfaced?
-
-`completeness = 0.4 * coverage + 0.3 * source_backing + 0.2 * actionability + 0.1 * coherence`
-
-### Contradiction Assessment
-
-- Count unresolved contradictions from synthesis.
-- If any contradictions involve safety-critical or correctness-critical claims, flag as `critical_gap`.
-
-### Gap Identification
-
-For each identified gap, record:
-- `gap_description`: What information is missing
-- `target_agent`: Which agent could fill it (websearch | explore | docs)
-- `target_query`: A focused query to address the gap
-- `severity`: critical | important | minor
-
-### Decision Logic
+For complex queries, decompose into atomic constraint triples with a sufficiency check:
 
 ```
-IF complexity_level == "simple":
-    → SKIP to Step 8 (never refine simple queries)
-
-IF completeness >= 0.75 AND no critical_gaps:
-    → SKIP to Step 8
-
-IF completeness < 0.75 OR critical_gaps exist:
-    → Proceed to Step 7 (REFINE)
-    → Pass gap list with target agents and queries
+constraint_001: {subject} {relation} {object} | type: factual | target: websearch | priority: 1
+constraint_002: {subject} {relation} {object} | type: comparative | target: docs | priority: 1
+constraint_003: {subject} {relation} {object} | type: causal | target: explore | depends_on: [001] | priority: 2
+sufficiency_check: true
 ```
 
----
+**Sufficiency check:** After each retrieval round, verify whether accumulated evidence satisfies all constraints. Halt retrieval when constraints are met — prevents retrieval drift where agents keep searching past the point of diminishing returns.
 
-## Step 7: REFINE (Conditional — max 1 iteration)
+### Per Sub-question Source Priority
 
-**Condition:** Step 6 completeness < 0.75 OR critical gaps identified.
+Each sub-question may override the global `source_priority`:
 
-**Never runs for `simple` queries. Maximum 1 refinement iteration.**
+| Sub-question nature | Recommended priority |
+|---|---|
+| API details, configuration | `product` (T1 docs > T2 blogs) |
+| Trade-offs, architecture decisions | `architecture` (T2 blogs > T1 docs > codebase) |
+| Research findings, benchmarks | `academic` (T1 papers > T1 docs) |
+| Current state, recent changes | `product` with recency boost |
 
-**Purpose:** Targeted gap-filling. Re-run ONLY the agents whose domain matches identified gaps.
+Set via `source_priority` field in the sub-question definition.
 
-### Execution Logic
+## Source Credibility Tiers
 
-1. From Step 6, collect all gaps with `severity` >= `important`.
-2. Group gaps by `target_agent`.
-3. Spawn ONLY the needed agents, with focused prompts targeting specific gaps:
+Single authoritative definition. Referenced by SKILL.md Step 5c and synthesis-template.md.
 
-```
-// Only if gaps target websearch:
-Agent(
-  description: "Refine: {gap_description}",
-  prompt: "The following specific gap was identified in prior research: {gap_description}. Search specifically for: {target_query}. Focus narrowly on this gap — do not repeat broad research.",
-  subagent_type: "agent-websearch"
-)
+| Tier | Weight | Examples |
+|------|--------|----------|
+| T1 | 1.0 | Official docs, RFCs, specs, primary research papers |
+| T2 | 0.7 | Engineering blogs (major companies), reputable tech media |
+| T3 | 0.4 | Community blogs, Stack Overflow, forum answers |
+| T4 | 0.2 | AI-generated content, SEO-optimized articles |
 
-// Only if gaps target explore:
-Agent(
-  description: "Refine: {gap_description}",
-  prompt: "Look specifically for: {gap_description}. Prior exploration missed this. Focus on: {target_query}.",
-  subagent_type: "agent-explore"
-)
+### Source Priority by Query Type
 
-// Only if gaps target docs:
-Agent(
-  description: "Refine: {gap_description}",
-  prompt: "Look up specifically: {gap_description}. Prior documentation lookup missed this. Focus on: {target_query}.",
-  subagent_type: "agent-docs"
-)
-```
+| Query Type | Priority Order |
+|---|---|
+| `academic` | T1 papers > T1 docs > T2 eng blogs > T3 community |
+| `product` | T1 docs > T2 eng blogs > T1 papers > T3 community |
+| `architecture` | T2 eng blogs > T1 docs > codebase patterns > T1 papers |
 
-4. Merge refinement results into the existing synthesis:
-   - Update relevant sections with new findings.
-   - Update confidence score.
-   - Update gap list (remove filled gaps, keep persistent ones).
+Default: `product` (most common for dev questions). Set via `source_priority` in Step 1b success criteria.
 
-5. **Termination rule:** Do NOT re-verify or loop again. If gaps persist after 1 refinement, report them honestly in the output. Over-refinement degrades quality.
+### Calibration Correction
 
----
+Tool-using agents (web search) are systematically over-confident because retrieved text superficially resembles correct information. Apply:
+- **Web-only claims** (no docs/codebase corroboration) → treat as one tier below apparent confidence
+- **Corroborated claims** (docs or codebase confirm) → keep stated confidence
+- **T3-T4 only claims** → flag as `needs verification`
 
-## Step 8: PERSIST + OUTPUT
+## Confidence Scoring
 
-### Memory Persistence (for `moderate` and `complex` queries only)
+Two-dimensional model (inspired by Google ADK evaluation criteria):
 
-**Conditions for writing to memory:**
-- The findings are novel (not already in memory).
-- The findings are likely reusable in future conversations (not highly context-specific).
-- Confidence is `medium` or `high`.
-- The topic relates to a library, pattern, or architectural decision that may come up again.
+### Trajectory Confidence — Were the right agents and tools used?
 
-**Memory entry format:**
+| Signal | Weight | Direction | Measurement |
+|--------|--------|-----------|-------------|
+| All planned agents executed successfully | High | Positive | Binary: all succeeded / any failed |
+| Coverage (sub-questions answered) | High | Positive | answered_sub_questions / total_sub_questions |
+| Search depth per finding | Medium | Positive | avg(queries_per_key_finding) — deeper = higher signal |
+| Agent convergence rate | Medium | Positive | concordant_claims / total_cross_agent_claims |
+| Agent failures/timeouts | Medium | Negative | Count of failed/timed-out agents |
+| Coordination gaps detected (Steps 2z/4z) | Medium | Negative | Count of MAST coordination failures |
+| Refinement triggered | Low | Negative | Boolean — refinement needed = trajectory gap |
+| Challenge survival rate | Low | Positive | confirmed_claims / total_challenged (Step 6 only) |
+| Early-exit triggered with full coverage | Low | Positive | Boolean |
 
-```markdown
----
-name: research-{topic-slug}
-description: "Key findings on {topic} — {one-line summary}"
-type: reference
----
+### Response Confidence — Is the content factually correct?
 
-Research on: {topic}
-Date: {YYYY-MM-DD}
-Confidence: {high|medium|low}
+| Signal | Weight | Direction | Measurement |
+|--------|--------|-----------|-------------|
+| Concordant sources (count) | High | Positive | Count of 2+ source claims |
+| Source tier (T1-T2 vs T3-T4) | High | Positive | T1-T2 claims / total claims |
+| Source diversity | High | Positive | unique_domains / total_sources (see below) |
+| Source recency (current year) | Medium | Positive | current_year_sources / total_sources |
+| Challenge results (confirmed claims) | Medium | Positive | confirmed / challenged |
+| Unresolved contradictions | Medium | Negative | Count of unresolved |
+| Niche topic indicator | Medium | Negative | < 3 T1-T2 sources found (see below) |
 
-Key findings:
-1. {finding with source}
-2. {finding with source}
+### Combined Level
 
-Sources:
-- [Title](URL)
-```
+| Level | Criteria |
+|-------|----------|
+| `high` | Both trajectory + response are strong: 3+ concordant T1-T2 sources, no unresolved contradictions, full coverage, all agents succeeded, claims survived challenge |
+| `medium` | Either dimension has gaps: 2 sources or mixed tiers, minor gaps, some claims weakened by challenge, or 1 agent failed |
+| `low` | Either dimension is weak: single source, significant gaps, unresolved contradictions, claims refuted, or multiple agent failures |
 
-**Write to:** `~/.claude/projects/{project-path}/memory/research-{topic-slug}.md`
-**Update MEMORY.md:** Add a pointer to the new file.
+Output format: `**Confidence:** {level} (trajectory: {t_level}, response: {r_level}) — {basis}`
 
-If a similar entry already exists, UPDATE it rather than creating a duplicate.
+### Source Diversity Score
 
-### Output Delivery
-
-Follow the output format defined in SKILL.md.
-
----
-
-## Execution Flow — Complete Decision Tree
+Measures whether sources cluster around a single authority or span multiple independent domains:
 
 ```
-START
-  │
-  ├─ Step 0: CLASSIFY query
-  │     ├─ complexity_level: simple | moderate | complex
-  │     └─ sub_questions[] (if complex)
-  │
-  ├─ Step 1: CACHE CHECK
-  │     ├─ cached_findings[] (if any)
-  │     └─ agents_to_skip[] (if cache is fresh)
-  │
-  ├─ Step 2: SPAWN agent-websearch (always)
-  │     └─ Wait for completion (max 60s)
-  │
-  ├─ EXTRACT from Step 2 output:
-  │     ├─ key_findings: string (summary, <500 words)
-  │     ├─ libraries: string[] (names extracted)
-  │     ├─ versions: map<string, string> (library → version)
-  │     └─ contradictions: string[] (conflicting claims)
-  │
-  ├─ DETECT codebase: Glob for manifest files
-  │     ├─ codebase_exists: bool
-  │     └─ manifest_deps: string[] (dependency names from manifest)
-  │
-  ├─ MERGE library list: libraries ∪ (manifest_deps ∩ relevant_to_question)
-  │
-  ├─ DECIDE parallel steps:
-  │     ├─ IF codebase_exists → spawn Step 3
-  │     ├─ IF libraries.length > 0 → spawn Step 4
-  │     └─ IF neither → skip to Step 5
-  │
-  ├─ WAIT for all spawned agents to complete
-  │
-  ├─ Step 5: SYNTHESIZE
-  │     ├─ Apply conflict resolution, deduplication, grounding
-  │     ├─ Surface contradictions (triangulation threshold: 2/3)
-  │     ├─ Score confidence (high | medium | low)
-  │     └─ Identify gaps
-  │
-  ├─ Step 6: VERIFY (quality gate)
-  │     ├─ Score completeness (0.0 to 1.0)
-  │     ├─ Detect critical gaps
-  │     └─ DECIDE:
-  │           ├─ IF simple → Step 8
-  │           ├─ IF score >= 0.75 AND no critical gaps → Step 8
-  │           └─ IF score < 0.75 OR critical gaps → Step 7
-  │
-  ├─ Step 7: REFINE (max 1 iteration)
-  │     ├─ Spawn targeted agents for identified gaps
-  │     ├─ Merge refinement into synthesis
-  │     └─ Do NOT re-verify — proceed to Step 8
-  │
-  └─ Step 8: PERSIST + OUTPUT
-        ├─ Write to memory (if novel + reusable)
-        └─ Deliver final response
+source_diversity = unique_domains / total_sources
 ```
+
+| Score | Interpretation | Action |
+|-------|---------------|--------|
+| >= 0.7 | High diversity — independent corroboration | No adjustment |
+| 0.5–0.7 | Moderate diversity — some clustering | No adjustment |
+| < 0.5 | Low diversity — sources cluster around same authority | Downgrade response confidence by one level |
+
+Example: 4 sources from `docs.rust-lang.org` + 1 from `blog.rust-lang.org` = 2/5 = 0.4 → low diversity despite high tier.
+
+### Niche Topic Cap (Dunning-Kruger correction)
+
+LLMs exhibit systematically high confidence on topics where they have the weakest training signal (arXiv:2603.09985). When limited authoritative sources exist, the model's internal confidence is unreliable.
+
+**Rule:** If fewer than 3 T1-T2 sources were found across ALL agents (websearch + docs + explore combined), automatically cap overall confidence at `medium` regardless of other signals. Add note: "Limited authoritative sources available — confidence capped."
+
+This prevents high-confidence answers on niche topics where the pipeline lacks sufficient grounding material.
+
+## Completeness Scoring Formula (Step 7a)
+
+```
+completeness = 0.35 * question_coverage
+             + 0.25 * source_backing
+             + 0.20 * actionability
+             + 0.10 * coherence
+             + 0.10 * noise_ratio
+```
+
+| Component | 1.0 | 0.5 | 0.0 |
+|-----------|-----|-----|-----|
+| `question_coverage` | All `must_answer` items addressed | Most addressed | Major items missing |
+| `source_backing` | All claims cited | Most cited | Many unsourced |
+| `actionability` | All `must_include` present | Some present | None present |
+| `coherence` | Consistent, contradictions surfaced | Minor issues | Internal contradictions |
+| `noise_ratio` | All claims map to `must_answer` items | Some tangential claims | Many off-topic claims |
+
+**Threshold:** 0.75. Below this → Step 8 (REFINE), unless `simple` query.
+
+**Noise Ratio** (deterministic): Count claims in the synthesis. Count claims that directly address a `must_answer` item. `noise_ratio = on_topic_claims / total_claims`. Score: 1.0 if ratio >= 0.9, 0.5 if ratio >= 0.7, 0.0 if ratio < 0.7.
+
+## Pipeline Invariants (Step 7b)
+
+Deterministic checks run during Step 7 VERIFY. Each invariant produces a pass/fail result.
+
+| # | Invariant | Check Method | Severity |
+|---|-----------|-------------|----------|
+| INV-1 | Every factual claim has a source URL | Scan synthesis for unsourced factual assertions | Critical |
+| INV-2 | Every `must_answer` item has a response | Map `must_answer` list against synthesis sections | Critical |
+| INV-3 | No T3-T4-only claims without `needs verification` flag | Cross-reference claim sources against tier table | Major |
+| INV-4 | Time-sensitive claims cite current/previous year sources | Check source dates for claims about "latest", "current", "best practice" | Major |
+| INV-5 | All `must_include` items present | Check for code_example, version_info, trade_offs as specified | Major |
+| INV-6 | Code examples reference existing codebase entities | If `how_to` + codebase exists: quick Grep for imports, functions, framework version | Minor |
+| INV-7 | Each active agent's output is represented | Verify no agent findings silently dropped | Minor |
+| INV-8 | Per-claim source grounding | Segment synthesis into individual claims; verify each maps to a source URL from agent output | Major |
+
+**Critical** invariant failure → always triggers Step 8 refinement (regardless of completeness score).
+**Major** invariant failure → logged as gap, triggers Step 8 if completeness < 0.75.
+**Minor** invariant failure → logged as warning in output, does not trigger refinement.
+
+## Typed Handoff Format (Step 3a)
+
+The canonical format for inter-agent handoff. Replace prose summaries.
+
+```
+Research context for downstream agents:
+
+claims:
+- text: "{finding}" | source: "{url}" | tier: T1|T2|T3|T4 | date: "YYYY-MM"
+- text: "{finding}" | source: "{url}" | tier: T1|T2|T3|T4 | date: "YYYY-MM"
+
+libraries: [{name: "lib", version: "X.Y.Z"}]
+contradictions: ["{claim_a} (source_a) vs {claim_b} (source_b)"]
+gaps: ["{what was not found}"]
+query_coverage: high|medium|low
+```
+
+Target: 300-500 tokens total. Include source URLs as pointers for restorability.
+
+## Step 5a Compression Format
+
+After Step 4 agents return, compress their outputs before synthesis:
+
+```
+web_research: {step_3a_typed_handoff — already compressed}
+codebase:
+- finding: "{what}" | file: "{path}:{line}" | relevance: high|medium
+- finding: "{what}" | file: "{path}:{line}" | relevance: high|medium
+docs:
+- api: "{function/type}" | detail: "{key info}" | version: "X.Y.Z" | source: "ctx7:{library_id}"
+- api: "{function/type}" | detail: "{key info}" | version: "X.Y.Z" | source: "ctx7:{library_id}"
+contradictions_cross_source: ["{web says X, docs say Y, codebase does Z}"]
+```
+
+Target: 300-500 tokens per source. Total pre-synthesis input: 900-1500 tokens max.
+
+## Codebase Detection (Step 3c)
+
+**Fast path:** Check for `.git` directory first. If found → `codebase_exists = true`, proceed to manifest detection for library extraction.
+
+**Manifest detection** (parallel Glob, for library extraction only):
+`Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, `pom.xml`, `build.gradle`, `*.sln`, `composer.json`, `mix.exs`, `deno.json`
+
+**No `.git`?** → `codebase_exists = false`, skip EXPLORE agent. Exception: if manifest files exist without `.git`, treat as codebase.
+
+## Library Extraction (Step 3c)
+
+1. Parse `libraries` field from Step 3a typed handoff.
+2. If codebase exists, read manifest for dependency versions.
+3. Select top 1-2 libraries most relevant to the question.
+4. Max 2 libraries per invocation (due to 3-call ctx7 limit).
 
 ## Error Handling Matrix
 
 | Scenario | Action |
 |----------|--------|
-| Step 2 returns empty | Proceed but note "Web research yielded no results." Steps 3-4 still run if conditions met. |
-| Step 2 times out | Proceed with empty research context. Note the timeout. |
-| Step 3 returns empty | Report "No relevant codebase findings." in codebase section. |
-| Step 3 times out | Use partial results if any. Note timeout. |
-| Step 4 Context7 unavailable | Report "Documentation lookup unavailable." Rely on Step 2 web results for docs. |
-| Step 4 returns empty | Report "No documentation found for [library]." |
-| Step 4 times out | Use partial results. Note timeout. |
+| Step 2 returns empty | Proceed. Note "Web research yielded no results." Step 4 still runs if conditions met. |
+| Step 2 times out (60s) | Proceed with empty research context. Note timeout. |
+| Step 3 boundary check fails | Note gaps, pass them to Step 4 agents as specific search targets. |
+| Step 3 early-exit triggers | Skip Step 4, proceed to Step 5 with web research only. |
+| Step 4 EXPLORE returns empty | Report "No relevant codebase findings." |
+| Step 4 EXPLORE times out (90s) | Use partial results if any. Note timeout. |
+| Step 4 DOCUMENT ctx7 CLI fails | Report "Documentation lookup unavailable." Rely on Step 2. |
+| Step 4 DOCUMENT ctx7 quota exhausted | Report quota error, suggest `ctx7 login`. Rely on Step 2. |
+| Step 4 DOCUMENT returns empty | Report "No documentation found for [library]." |
+| Step 4 DOCUMENT times out (45s) | Use partial results. Note timeout. |
+| Step 6 CHALLENGE returns empty | Proceed without challenge results. Note in confidence basis. |
+| Step 6 CHALLENGE times out (45s) | Use partial results. Claims not challenged are noted. |
 | All agents fail | Return whatever is available with honest disclaimer. |
-| Exa MCP unavailable | agent-websearch falls back to native WebSearch/WebFetch automatically. |
-| Context7 resolve fails | agent-docs tries fallback plugin tools automatically. |
-| Step 6 score < 0.75 but simple query | Skip refinement, output with gaps noted. |
-| Step 7 refinement doesn't improve | Stop after 1 iteration, report remaining gaps. |
-| Memory directory doesn't exist | Skip Step 1 and Step 8 persistence. |
+| Exa MCP unavailable | agent-websearch falls back to native WebSearch/WebFetch. |
+| Step 7 invariant failure but simple query | Log warning, skip refinement, output with gaps noted. |
+| Step 7 evaluator agent fails (complex) | Fall back to orchestrator self-check. Note in confidence basis. |
+| Step 8 doesn't improve (<5% change) | Stop after 1 iteration, report remaining gaps. |
+| No memory directory | Skip cache check and persistence. |
+| Step 0 trivial bypass | Answer directly from model knowledge, skip pipeline. Flag as `trivial_bypass`. |
+| Step 2 complex: one of two websearch agents fails | Use available results, note partial web coverage. |
 
-## Performance Characteristics
+<!-- Performance Characteristics — Design-time reference only, not used during pipeline execution.
+Simple: 15-40s | Moderate: 50-110s | Complex: 80-190s
+See git history for detailed per-step timing table if needed for diagnostics. -->
 
-| Step | Expected Duration | Parallelism |
-|------|-------------------|-------------|
-| Step 0 (CLASSIFY) | <1s | Runs alone (orchestrator) |
-| Step 1 (CACHE CHECK) | <2s | Runs alone (orchestrator) |
-| Step 2 (RESEARCH) | 10-30s | Runs alone |
-| Step 3 (EXPLORE) | 15-60s | Parallel with Step 4 |
-| Step 4 (DOCUMENT) | 5-20s | Parallel with Step 3 |
-| Step 5 (SYNTHESIZE) | 5-10s | Runs alone (orchestrator) |
-| Step 6 (VERIFY) | <2s | Runs alone (orchestrator) |
-| Step 7 (REFINE) | 10-40s | Optional, targeted agents |
-| Step 8 (PERSIST) | <2s | Runs alone (orchestrator) |
-| **Total (simple, best)** | **20-40s** | |
-| **Total (moderate, no refine)** | **35-80s** | |
-| **Total (complex, with refine)** | **60-150s** | |
+## Query Enrichment Templates (Step 1d)
+
+**Simple queries** — Single-line rewrite:
+```
+websearch_instruction: "Find {specific_answer} — prioritize {source_type} sources from {current_year}"
+```
+
+**Moderate queries** — Per-agent instructions:
+```
+websearch_instruction: "Find X, Y, Z — prioritize {source_type} sources"
+explore_instruction: "Look for patterns matching X in {likely_dirs}"
+docs_instruction: "Check API for {specific_function} in {library} v{version}"
+```
+
+**Complex queries** — Full enrichment with format specification:
+```
+websearch_instruction: "Find X, Y, Z — prioritize {source_type}. Expected format: comparison table with columns [A, B, C]"
+explore_instruction: "Trace the flow from {entry_point} through {layers}. Map dependencies."
+docs_instruction: "Check API for {function} in {library} v{version}. Include migration notes from v{old}."
+```
+
+## Plan Answer Shape (complex queries only, Step 1)
+
+Outline the expected answer structure before dispatching agents:
+- The 2-4 sections the answer will need
+- Which agent is responsible for each section
+- What a "done" answer looks like structurally
+
+This prevents agents from producing overlapping or disjointed outputs.
+
+## Cache Check (Step 1)
+
+Scan `~/.claude/projects/*/memory/` for prior research matching the topic.
+- Fresh + relevant + high confidence → use as primary source, skip corresponding agent
+- Stale or medium confidence → supplementary context, still run agents
+- No match or no memory directory → proceed normally
+
+## Cross-Run Learning Metadata (Step 9)
+
+When persisting findings to memory, include both research and pipeline operational metadata:
+
+```yaml
+---
+name: research-{topic-slug}
+description: "{one-line summary}"
+type: reference
+query_strategies:
+  effective: ["{search pattern that yielded T1 results}"]
+  ineffective: ["{search pattern that returned noise}"]
+reliable_sources: ["{domain that consistently provided T1-T2 content}"]
+unreliable_sources: ["{domain that returned T4/outdated content}"]
+pipeline_performance:
+  complexity_level: simple|moderate|complex
+  agents_spawned: [websearch, explore, docs, challenge, evaluator]
+  early_exit_triggered: true|false
+  refinement_needed: true|false
+  refinement_gap: "{what was missing}"
+  completeness_score: 0.85
+  invariant_failures: ["{INV-N: description}"]
+---
+```
+
+This metadata improves future cache checks (workflow-engine.md Cache Check), query enrichment (Step 1d), and identifies query patterns that systematically require refinement.

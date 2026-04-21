@@ -95,8 +95,46 @@ metadata:
     mcp-server: projecthub
 ```
 
+### model (optional)
+- Override the model used when this skill runs
+- Common values: `opus`, `sonnet`, `haiku`
+- Example: `model: opus` for complex multi-agent pipelines
+- If omitted, the skill uses the current session's model
+
+### argument-hint (optional)
+- Placeholder text shown in autocomplete to indicate expected arguments
+- Example: `argument-hint: "[file-or-folder] [--perf|--clean]"`
+- Use with `$ARGUMENTS`, `$0`, `$1` etc. in the skill body
+
+### context (optional)
+- Set to `fork` to run the skill in an isolated subagent context (fresh window, no conversation history)
+- The skill content becomes the agent's task prompt
+- Only use for skills with explicit actionable instructions — background-knowledge skills without a clear task will return without meaningful output
+- Example: `context: fork`
+
+### agent (optional)
+- Which agent type to use when `context: fork` is set
+- Available: `Explore`, `Plan`, `general-purpose`, or custom agent names from `.claude/agents/`
+- Example: `agent: Explore`
+
+### disable-model-invocation (optional)
+- Set to `true` to prevent Claude from auto-triggering this skill
+- The skill becomes manual-only (user must type `/skill-name`)
+- Use for skills with side effects: `/deploy`, `/commit`, `/push`
+- Example: `disable-model-invocation: true`
+
+### user-invocable (optional)
+- Set to `false` to hide the skill from the `/` menu
+- Claude can still auto-trigger it when relevant
+- Use for background domain knowledge Claude should apply passively
+- Example: `user-invocable: false`
+
 ### allowed-tools (optional)
 - List of tools the skill is allowed to use
+- Restricts the tool surface to only what the skill needs
+- Supports glob patterns for Bash: `Bash(git *)`, `Bash(npm *)`
+- Example: `allowed-tools: Read, Grep, Glob, Bash(git log *)`
+- Use for read-only audit skills to prevent accidental writes
 
 ## Security Restrictions
 
@@ -132,5 +170,5 @@ metadata:
 3. Contains `name` field (kebab-case string)
 4. Contains `description` field (string, < 1024 chars)
 5. No XML tags in any field
-6. No unknown fields (only: name, description, license, allowed-tools, metadata)
+6. No unknown fields (only: name, description, model, argument-hint, context, agent, disable-model-invocation, user-invocable, license, allowed-tools, compatibility, metadata)
 7. Valid YAML syntax (proper quoting, no unclosed quotes)

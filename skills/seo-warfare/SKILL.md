@@ -4,7 +4,7 @@ name: seo-warfare
 description: >
   SEO audit, optimization, and generation pipeline for traditional search and AI search
   (Google AI Overviews, ChatGPT Search, Perplexity). Orchestrates agent-websearch, agent-explore,
-  and agent-docs in a multi-phase pipeline. Use when the user says "seo", "seo audit",
+  and docs agent in a multi-phase pipeline. Use when the user says "seo", "seo audit",
   "seo-warfare", "structured data", "schema markup", "core web vitals", "GEO", "AEO",
   or asks to optimize for search engines, fix SEO issues, or generate schema markup.
   Do NOT use for general web development tasks that have no SEO component.
@@ -105,7 +105,7 @@ User Request + $ARGUMENTS
 |  | Phase 3a:  |  | Phase 3b:    |  |
 |  | COMPETITIVE|  | FRAMEWORK    |  |
 |  | INTEL      |  | DOCS         |  |
-|  | (websearch)|  | (agent-docs) |  |
+|  | (websearch)|  | (ctx7 docs)  |  |
 |  +-----+------+  +------+------+  |
 |        |                |          |
 +--------+----------------+----------+
@@ -260,8 +260,8 @@ Agent(
 // Phase 3b — ONLY if a framework-specific SEO library was detected in Phase 1
 Agent(
   description: "Fetch docs for {seo_library}",
-  prompt: "Look up documentation for {seo_library} (version {version}). Focus on: meta tag configuration, JSON-LD generation, sitemap generation, and any SEO-specific APIs. Return code examples for the most common use cases.",
-  subagent_type: "agent-docs"
+  prompt: "Look up documentation for {seo_library} (version {version}) using the ctx7 CLI. This is a READ-ONLY research task — do NOT modify any files.\n\n## ctx7 CLI Protocol\n1. bunx ctx7@latest library {seo_library} 'SEO meta tags JSON-LD sitemap'\n2. bunx ctx7@latest docs {library_id} '{focused_query}'\nMax 3 ctx7 calls total.\n\nFocus on: meta tag configuration, JSON-LD generation, sitemap generation, and any SEO-specific APIs. Return code examples for the most common use cases.",
+  subagent_type: "general-purpose"
 )
 ```
 
@@ -494,10 +494,9 @@ Set up IndexNow protocol. See `references/technical-seo.md`.
 |----------|----------|
 | **agent-websearch fails** | Skip competitive analysis. Base Phase 7 content strategy on codebase analysis only. Note "Competitive data unavailable" in report. |
 | **agent-explore fails** | Fall back to direct Glob/Grep scanning for Phase 2 checklist items. Reduce audit depth. |
-| **agent-docs fails** | Use Phase 3a web research results for framework SEO library guidance. Note reduced doc coverage. |
+| **docs agent fails / ctx7 CLI error** | Use Phase 3a web research results for framework SEO library guidance. Note reduced doc coverage. |
 | **No framework detected** (pure static HTML) | Treat as plain HTML. Skip framework-specific optimizations. Focus on raw HTML/meta tag/schema generation. |
 | **No package.json / manifest found** | Treat as static site or non-web project. Ask user to confirm this is a web project before proceeding. |
-| **Context7 MCP unavailable** | agent-docs falls back to web research for library documentation. Note the fallback. |
 | **Exa MCP unavailable** | agent-websearch falls back to native WebSearch/WebFetch automatically. |
 | **Target URL/domain not provided** | Ask user before proceeding with Phase 3 competitive intel. Phase 1-2 can run on local codebase without a target URL. |
 | **Project is API-only (no HTML rendering)** | Stop after Phase 1. Inform user that SEO optimization requires web-facing pages. |

@@ -95,6 +95,18 @@ Before each step, print a progress header:
 
 Between major steps, print a thin separator: `───────────────────────────────`
 
+## Effort Scaling (Fast-Path for Obvious Errors)
+
+Not all errors need the full 7-step pipeline. Before starting Step 1, evaluate the error complexity:
+
+| Error complexity | Pipeline path | Rationale |
+|---|---|---|
+| **Trivial** — syntax error, missing import, obvious typo, single-line fix visible in error message | **Fast-path**: Skip Steps 3-5. Reproduce → Triage → Fix → Verify. No agents needed. | Anthropic: "Simple queries warrant 1 agent with 3-10 tool calls." Spawning 3 agents for a missing semicolon wastes context and time. |
+| **Standard** — type mismatch, runtime error with clear stack trace, failing test with assertion diff | **Full pipeline**: All 7 steps, Steps 3-4 in parallel, Step 5 conditional. | Default path — this is what the pipeline is designed for. |
+| **Complex** — multi-file issue, cryptic error, no stack trace, architecture-level bug, concurrency | **Full pipeline + extended thinking**: All 7 steps. Use extended thinking for root cause analysis at the decision gate and before fix implementation. | Google Passerine: human-reported bugs (ambiguous) have 25% fix rate vs 73% for machine-reported (clear). Complex errors need more reasoning investment. |
+
+The orchestrator determines complexity at the end of Step 2 (triage) based on: number of files involved, clarity of error message, whether root cause is immediately visible, and number of hypotheses generated. If only 1 hypothesis with HIGH initial confidence → fast-path.
+
 ## Step-by-Step Execution
 
 ### Step 1 — Reproduce (Orchestrator, Fast)
@@ -108,7 +120,7 @@ Print: `[Step 1/7] REPRODUCE`
 | Error source | Reproduction command |
 |---|---|
 | Compiler output | Re-run the build command (`cargo check`, `tsc --noEmit`, `go build ./...`) |
-| Test failure | Re-run the specific failing test (`cargo test test_name`, `npx vitest run path`, `pytest path::test`) |
+| Test failure | Re-run the specific failing test (`cargo test test_name`, `bunx vitest run path`, `pytest path::test`) |
 | Runtime error | Run the failing command/script as described by user |
 | Linter/clippy | Re-run the linter (`cargo clippy`, `eslint`, `mypy`) |
 
@@ -124,6 +136,7 @@ Print: `[Step 1/7] REPRODUCE`
 - User pasted a complete error output and the error is clearly from a deterministic source (compiler, type checker)
 - The error is visible in the code itself (syntax error, obvious type mismatch)
 - The user explicitly says "I just ran this and got..."
+- The error is intermittent (user confirms it does not occur every run). In this case: skip Step 1, document as non-deterministic in the triage report, and focus Step 3 investigation on concurrency, caching, timing, and state initialization patterns
 
 ### Step 2 — Error Triage (Orchestrator, Instant)
 
@@ -154,6 +167,10 @@ Parse the error and classify it. This step uses NO agents — the orchestrator h
 | **Logic bug** | Wrong output, assertion failure, test mismatch (expected vs got) |
 | **Performance issue** | Timeout, OOM, slow query, high CPU |
 | **Test failure** | Test framework output, assertion messages, diff output |
+
+**2b-extra. Compound error check:**
+
+If the error output contains multiple distinct errors (e.g., N compiler errors, multiple test failures), determine if they share a root cause. If so, focus triage on the FIRST error only — later errors are often cascades. If they appear independent, triage them separately and note this in the report. Reference: `references/error-patterns.md` § Compound Errors.
 
 **2c. Build the Hypothesis Register:**
 
@@ -215,9 +232,10 @@ When a regression is detected in Step 2d, run `git bisect` to find the causal co
 2. Run `git bisect start HEAD {good_commit}`
 3. Use the reproduction command from Step 1 as the bisect oracle: `git bisect run {command}`
 4. The output identifies the exact commit that introduced the bug
-5. Read the commit diff to understand what changed
-6. Feed the causal commit info into the hypothesis register as strong evidence
-7. Proceed to the decision gate with this evidence
+5. Read the commit diff to understand what changed — **save this diff as bug-inducing context** for Step 6 (Melbourne 2025: providing the regression-causing diff yields 1.8x more successful repairs)
+6. Run `git bisect reset` to restore the working tree
+7. Feed the causal commit info and diff into the hypothesis register as strong evidence
+8. Proceed to the decision gate with this evidence
 
 **Skip bisect if:**
 - No clear good/bad boundary exists
@@ -226,7 +244,10 @@ When a regression is detected in Step 2d, run `git bisect` to find the causal co
 
 ### Step 3 — Codebase Investigation (agent-explore)
 
-Print: `[Step 3-4/7] INVESTIGATE + VERIFY DOCS (parallel)`
+Print the appropriate header based on which steps are active:
+- Both Steps 3 AND 4 active: `[Step 3-4/7] INVESTIGATE + VERIFY DOCS (parallel)`
+- Only Step 3 active (no library identified): `[Step 3/7] INVESTIGATE`
+- Only Step 4 active (no codebase detected): `[Step 4/7] VERIFY DOCS`
 
 Spawn agent-explore to trace the error to its root cause:
 
@@ -246,15 +267,15 @@ The agent investigates:
 - Identify the architectural context — is it a handler, middleware, model, test?
 - Report confidence level: HIGH / MEDIUM / LOW
 
-### Step 4 — Documentation Check (agent-docs)
+### Step 4 — Documentation Check (ctx7 CLI)
 
-Spawn agent-docs to verify API usage against official documentation:
+Spawn a docs agent to verify API usage against official documentation via ctx7 CLI:
 
 ```
 Agent(
   description: "Check docs for {library}",
   prompt: <see references/agent-orchestration.md for template>,
-  subagent_type: "agent-docs"
+  subagent_type: "general-purpose"
 )
 ```
 
@@ -281,7 +302,7 @@ After Steps 3-4 complete, update the hypothesis register with evidence from both
 
 - **Root cause identified (HIGH confidence)** → proceed to Step 6.
   - agent-explore found the exact code causing the issue AND
-  - agent-docs confirmed the correct API usage (or the error is not API-related)
+  - docs agent confirmed the correct API usage (or the error is not API-related)
   - Only ONE hypothesis remains ACTIVE, all others ELIMINATED
 
 - **Root cause unclear (MEDIUM confidence)** → proceed to Step 5.
@@ -292,9 +313,16 @@ After Steps 3-4 complete, update the hypothesis register with evidence from both
   - Multiple hypotheses still ACTIVE
 
 - **Root cause unclear (LOW confidence)** → ask the user for more context.
+  - Print: `[Step 3-4/7 → ESCALATE] ROOT CAUSE UNCLEAR`
   - No hypothesis has strong supporting evidence
   - The error may be environment-specific, timing-dependent, or involve state not visible in the codebase
   - Present what was found so far and ask targeted discriminating questions (questions that eliminate the maximum number of hypotheses)
+
+- **All hypotheses eliminated (register exhausted)** → generate new hypotheses from remaining evidence.
+  - Print: `[Step 3-4/7 → REFRAME] ALL HYPOTHESES ELIMINATED`
+  - Re-examine agent outputs for overlooked signals
+  - Generate 2-3 new hypotheses from a different frame (e.g., if all code-level hypotheses failed, consider environment, timing, or data-level causes)
+  - If still no viable hypothesis after reframing → proceed to Step 5 (web research) regardless of confidence
 
 ### Step 5 — Web Research (agent-websearch, Conditional)
 
@@ -426,8 +454,8 @@ These smells should trigger self-correction, not pipeline abort. The orchestrato
 5. Step 6 runs AFTER all investigation is complete — never fix before understanding.
 6. Step 7 ALWAYS verifies — never claim a fix without running the reproduction command.
 7. DDI circuit breaker is MANDATORY — max 2 fix attempts, then escalate to user.
-8. Agent boundaries are strict — explore reads code, docs queries Context7, websearch fetches URLs.
-9. Max 3 Context7 calls — agent-docs must stay within the hard limit.
+8. Agent boundaries are strict — explore reads code, docs uses ctx7 CLI, websearch fetches URLs.
+9. Max 3 ctx7 CLI calls — docs agent must stay within the hard limit.
 10. Compress triage report before passing to agents (<300 words).
 11. Every diagnosis claim must trace to evidence (file:line, doc reference, or URL).
 12. Graceful degradation — if any agent fails, continue with available data and note the gap.
@@ -435,12 +463,12 @@ These smells should trigger self-correction, not pipeline abort. The orchestrato
 14. Maintain the hypothesis register throughout — update after every step, present in final diagnosis.
 15. Prefer discriminating observations — each diagnostic action should eliminate the maximum number of hypotheses.
 16. Print `[Step N/7]` progress headers before each step — NEVER skip progress indicators.
-17. For complex root cause analysis and multi-file investigations, use ultrathink for deep reasoning.
+17. Scale effort to error complexity — use the Effort Scaling table to determine fast-path vs full pipeline vs extended thinking.
 
 ## Error Handling
 
 - agent-explore returns empty: the error may be in generated/external code — note this, proceed with Steps 4-5.
-- agent-docs returns empty: the library may lack Context7 coverage — note this, rely on web research.
+- docs agent returns empty: the library may lack ctx7 coverage — note this, rely on web research.
 - agent-websearch returns empty: the error may be novel — apply best-effort diagnosis from Steps 3-4.
 - All agents fail: use the triage report and error message to provide the best guidance possible with an honest disclaimer.
 - No codebase detected: skip Step 3, rely on Steps 4-5 and the error message itself.
@@ -452,7 +480,6 @@ These smells should trigger self-correction, not pipeline abort. The orchestrato
 
 - Skip reproduction and jump to investigation — reproduce first, investigate second.
 - Skip triage and jump straight to web searching — triage prevents wasted effort.
-- Apply a fix before completing investigation — understand first, fix second.
 - Suggest "just Google it" — every step must add diagnostic value.
 - Spawn all agents simultaneously — Steps 1-2 must complete first to inform Steps 3-4.
 - Run Step 5 unconditionally — web research is the fallback, not the default.
@@ -462,6 +489,8 @@ These smells should trigger self-correction, not pipeline abort. The orchestrato
 - Iterate more than 2 fix attempts — the DDI circuit breaker is mandatory. Escalate to user.
 - Re-read files without making edits — this is a trajectory smell (NO_OP_CAT). Decide and act.
 - Search 3+ times without editing — this is a trajectory smell (CONSECUTIVE_SEARCH). You have enough info.
+- Edit the same file repeatedly without running a test — this is a trajectory smell (CONSECUTIVE_EDITS). Test before editing again.
+- Skip verification after a fix — this is a trajectory smell (NO_TEST). Run the reproduction command immediately.
 
 ## Constraints (Three-Tier)
 
@@ -474,6 +503,7 @@ These smells should trigger self-correction, not pipeline abort. The orchestrato
 ### ASK FIRST
 - Proceed with LOW confidence root cause (ask user for more context)
 - Apply fix when multiple equally viable strategies exist
+- Apply fix that modifies a public API signature (function parameters, return type, struct fields)
 
 ### NEVER
 - Fix before understanding — investigate first, fix second

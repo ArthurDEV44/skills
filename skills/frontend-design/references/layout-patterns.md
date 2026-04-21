@@ -274,18 +274,8 @@ An image gallery should be wide or full-bleed. This variation creates rhythm.
 ## Magazine Layout Techniques
 
 ### Pull Quote Interruption
-Break the reading flow with a large pull quote in the margin or overlapping the text column:
-```css
-.pull-quote {
-  font-size: var(--text-2xl);
-  font-weight: 300;
-  font-style: italic;
-  border-left: 3px solid var(--color-accent);
-  padding-left: var(--space-6);
-  margin: var(--space-12) calc(-1 * var(--space-16));
-  max-width: 35ch;
-}
-```
+Break the reading flow with a large pull quote in the margin or overlapping the text column.
+See `typography.md` for the full pull-quote CSS pattern.
 
 ### Full-Bleed Image Between Sections
 An image that breaks out of the content container signals editorial intent:
@@ -313,12 +303,98 @@ Instead of lines or spacing, use large faded numbers or words:
 
 ## Responsive Approach
 
-- Use CSS Grid `auto-fit` / `auto-fill` for grids that adapt without breakpoints
-- Use `clamp()` for spacing as well as typography
-- Reduce column counts on mobile but maintain the ASYMMETRIC feel
-- Stack elements vertically on mobile but keep intentional spacing ratios
-- Don't make everything centered on mobile — left-aligned text is more readable
-- On mobile, hero headlines should still be large (at least `clamp(2.5rem, 8vw, 5rem)`)
+### Mobile-First Strategy
+Write base styles for the smallest screen, then layer on complexity with `min-width` queries.
+This is progressive enhancement — mobile gets lean CSS, desktop gets the extras.
+
+```css
+/* Base = mobile */
+.hero { display: grid; grid-template-columns: 1fr; gap: var(--space-6); }
+
+/* Tablet and up */
+@media (min-width: 768px) {
+  .hero { grid-template-columns: 2fr 3fr; min-height: 85vh; }
+}
+```
+
+### Breakpoint System
+
+**Container queries are the DEFAULT for component-level responsiveness (baseline 2025+).**
+Media query breakpoints are for PAGE-level layout only (viewport width, overall page structure).
+Any component that needs to adapt to its own available space should use `container-type: inline-size`
+and `@container` queries, not `@media`.
+
+```css
+:root {
+  --bp-sm:  640px;   /* Large phones — page layout only */
+  --bp-md:  768px;   /* Tablets — page layout only */
+  --bp-lg:  1024px;  /* Small laptops — page layout only */
+  --bp-xl:  1280px;  /* Desktops — page layout only */
+}
+```
+For component-level responsiveness, use container queries instead of media queries:
+```css
+.card-grid { container-type: inline-size; }
+@container (min-width: 480px) {
+  .card { grid-template-columns: 1fr 1fr; }
+}
+```
+
+### Touch Targets
+Minimum touch target: **44x44px**. See `accessibility.md` for the full WCAG 2.5.8 requirement
+and CSS patterns.
+
+### Responsive Typography
+Use `clamp()` for fluid type (see `typography.md` for the full scale). On mobile, maintain
+the same type hierarchy — headings must still feel large relative to body text.
+Hero headlines: at least `clamp(2.5rem, 8vw, 5rem)`.
+
+### Mobile Layout Rules
+- **Left-align text.** Centered body text on mobile is harder to read.
+- **Stack to single column** but keep intentional spacing ratios between groups.
+- **Maintain asymmetry through spacing variation** — unequal top/bottom padding on sections,
+  varying gaps between elements. The layout is single-column, not single-rhythm.
+- Use CSS Grid `auto-fit` / `auto-fill` for grids that adapt without breakpoints.
+- Use `clamp()` for spacing as well as typography.
+
+### Scroll-Driven Animations (CSS-Only)
+
+Scroll-driven animations are baseline CSS (2025+). Prefer them over JavaScript scroll libraries.
+
+```css
+/* Progress bar that fills as user scrolls the page */
+.reading-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: var(--color-accent);
+  transform-origin: left;
+  animation: progress-fill auto linear;
+  animation-timeline: scroll();
+}
+
+@keyframes progress-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* Element that fades in when it enters the viewport */
+.reveal-on-scroll {
+  animation: fade-in auto linear both;
+  animation-timeline: view();
+  animation-range: entry 0% entry 100%;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; translate: 0 20px; }
+  to { opacity: 1; translate: 0 0; }
+}
+```
+
+Use scroll-driven animations ONLY when the user requests animation. They replace
+45KB+ JavaScript scroll libraries with zero-dependency CSS. Always pair with
+`prefers-reduced-motion` from `accessibility.md`.
 
 ## What NOT To Do
 
